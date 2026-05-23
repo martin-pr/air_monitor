@@ -50,6 +50,26 @@ arduino-cli monitor -p /dev/ttyACM0 -c baudrate=115200
 
 Press Enter once after connecting — the USB-Serial-JTAG peripheral (HWCDC) requires the host to send a byte before output appears. This is default arduino-esp32 3.x behavior.
 
+## Android Widget
+
+The `app` directory contains a minimal Android home-screen widget built directly with CMake and Android SDK command-line tools. It currently displays a single text field: `Hello world!`.
+
+Build the debug APK:
+
+```bash
+cd app
+cmake -S . -B build
+cmake --build build
+```
+
+Install it on a connected Android device:
+
+```bash
+adb install -r build/AirMonitorWidget-debug.apk
+```
+
+After installing, add the **Air Monitor** widget from the Android launcher widget picker. If an older instance is already on the home screen, remove and add it again so the launcher reloads the widget metadata.
+
 ## BLE
 
 The device advertises as **Air Monitor** and exposes a single GATT service:
