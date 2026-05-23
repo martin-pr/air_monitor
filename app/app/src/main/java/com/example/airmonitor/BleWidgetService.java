@@ -124,7 +124,6 @@ public class BleWidgetService extends Service {
         if (!hasBlePermissions()) {
             return;
         }
-        setStatus(getString(R.string.connected));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             gatt = device.connectGatt(this, false, gattCallback, BluetoothDevice.TRANSPORT_LE);
         } else {
@@ -137,7 +136,6 @@ public class BleWidgetService extends Service {
         public void onConnectionStateChange(BluetoothGatt g, int status, int newState) {
             if (newState == BluetoothProfile.STATE_CONNECTED && hasBlePermissions()) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    setStatus("requesting MTU");
                     g.requestMtu(BLE_MTU);
                 } else {
                     g.discoverServices();
@@ -156,7 +154,6 @@ public class BleWidgetService extends Service {
 
         @Override
         public void onMtuChanged(BluetoothGatt g, int mtu, int status) {
-            setStatus("MTU " + mtu);
             if (hasBlePermissions()) {
                 g.discoverServices();
             }
@@ -168,33 +165,31 @@ public class BleWidgetService extends Service {
             BluetoothGattCharacteristic characteristic =
                 service == null ? null : service.getCharacteristic(CHARACTERISTIC_UUID);
             if (characteristic == null || !hasBlePermissions()) {
-                setStatus("missing BLE characteristic");
+                setStatus(getString(R.string.not_connected));
                 return;
             }
 
             g.setCharacteristicNotification(characteristic, true);
             BluetoothGattDescriptor descriptor = characteristic.getDescriptor(CCCD_UUID);
             if (descriptor == null) {
-                setStatus("missing notify descriptor");
+                setStatus(getString(R.string.not_connected));
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 int result = g.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
                 if (result != BluetoothGatt.GATT_SUCCESS) {
-                    setStatus("subscribe failed");
+                    setStatus(getString(R.string.not_connected));
                 }
             } else {
                 descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
                 if (!g.writeDescriptor(descriptor)) {
-                    setStatus("subscribe failed");
+                    setStatus(getString(R.string.not_connected));
                 }
             }
         }
 
         @Override
         public void onDescriptorWrite(BluetoothGatt g, BluetoothGattDescriptor descriptor, int status) {
-            if (CCCD_UUID.equals(descriptor.getUuid()) && status == BluetoothGatt.GATT_SUCCESS) {
-                setStatus("subscribed, waiting for data");
-            } else {
-                setStatus("subscribe failed");
+            if (!CCCD_UUID.equals(descriptor.getUuid()) || status != BluetoothGatt.GATT_SUCCESS) {
+                setStatus(getString(R.string.not_connected));
             }
         }
 
@@ -223,7 +218,7 @@ public class BleWidgetService extends Service {
 
         try {
             JSONObject json = new JSONObject(text);
-            setData(json, "receiving data");
+            setData(json, "");
         } catch (Exception error) {
             JSONObject raw = new JSONObject();
             try {

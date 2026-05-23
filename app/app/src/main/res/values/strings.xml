@@ -2,7 +2,6 @@
 <resources>
     <string name="app_name">Air Monitor</string>
     <string name="not_connected">not connected</string>
-    <string name="connected">connected</string>
     <string name="permission_needed">missing Bluetooth permission</string>
     <string name="open_app_to_connect">open app to connect</string>
     <string name="scanning">scanning</string>
