@@ -11,21 +11,21 @@
 constexpr std::string_view SERVICE_UUID        = "f59c6ce6-b894-4e87-9c5b-b347b72c7e93";
 constexpr std::string_view CHARACTERISTIC_UUID = "3d455d99-f31a-4826-bf25-7c5f23cedc49";
 
-constexpr uint32_t NOTIFY_INTERVAL_MS = 30000;
-constexpr uint32_t BLINK_MS           = 50;
+constexpr uint32_t NOTIFY_INTERVAL_MS  = 30000;
+constexpr uint32_t BLINK_MS            = 50;
+constexpr uint32_t ADVERTISE_BLINK_MS  = 100;
+constexpr uint32_t ADVERTISE_PERIOD_MS = 1000;
 constexpr size_t   JSON_BUF_SIZE      = 64;
 constexpr uint16_t BLE_MTU            = 512;
 
 BLECharacteristic *characteristic;
 bool deviceConnected = false;
+bool restartAdvertising = false;
 uint32_t counter = 0;
 
 class ServerCallbacks : public BLEServerCallbacks {
-    void onConnect(BLEServer *server) { deviceConnected = true; }
-    void onDisconnect(BLEServer *server) {
-        deviceConnected = false;
-        BLEDevice::getAdvertising()->start();
-    }
+    void onConnect(BLEServer *server)    { deviceConnected = true; }
+    void onDisconnect(BLEServer *server) { deviceConnected = false; restartAdvertising = true; }
 };
 
 void setup() {
@@ -55,6 +55,22 @@ void setup() {
 void loop() {
     static uint32_t lastNotify = 0;
     uint32_t now = millis();
+
+    if (restartAdvertising) {
+        restartAdvertising = false;
+        delay(500);
+        BLEDevice::getAdvertising()->start();
+    }
+
+    if (!deviceConnected) {
+        static uint32_t lastAdvertiseBlink = 0;
+        if (now - lastAdvertiseBlink >= ADVERTISE_PERIOD_MS) {
+            lastAdvertiseBlink = now;
+            digitalWrite(LED_BUILTIN, LOW);
+            delay(ADVERTISE_BLINK_MS);
+            digitalWrite(LED_BUILTIN, HIGH);
+        }
+    }
 
     delay(10);
 
