@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
+import android.os.Bundle;
 
 public class AirWidgetProvider extends AppWidgetProvider {
     @Override
@@ -26,6 +27,16 @@ public class AirWidgetProvider extends AppWidgetProvider {
     @Override
     public void onEnabled(Context context) {
         startIfAllowed(context);
+    }
+
+    @Override
+    public void onAppWidgetOptionsChanged(
+        Context context,
+        AppWidgetManager manager,
+        int widgetId,
+        Bundle newOptions
+    ) {
+        BleWidgetService.refreshWidgets(context);
     }
 
     private static void startIfAllowed(Context context) {

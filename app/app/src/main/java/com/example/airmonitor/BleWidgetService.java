@@ -35,8 +35,10 @@ import android.widget.RemoteViews;
 
 import org.json.JSONObject;
 
+import java.text.DateFormat;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.UUID;
@@ -47,6 +49,9 @@ public class BleWidgetService extends Service {
     private static final UUID CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
     private static final String CHANNEL_ID = "air_monitor_ble";
     private static final int BLE_MTU = 512;
+    private static JSONObject lastJson;
+    private static String lastStatus;
+    private static String lastUpdateTime;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private BluetoothLeScanner scanner;
@@ -220,12 +225,7 @@ public class BleWidgetService extends Service {
             JSONObject json = new JSONObject(text);
             setData(json, "");
         } catch (Exception error) {
-            JSONObject raw = new JSONObject();
-            try {
-                raw.put("raw", text);
-            } catch (Exception ignored) {
-            }
-            setData(raw, "invalid JSON");
+            setStatus("invalid JSON");
         }
     }
 
@@ -291,6 +291,12 @@ public class BleWidgetService extends Service {
     }
 
     public static void updateWidgets(Context context, JSONObject json, String status) {
+        if (json != null) {
+            lastJson = json;
+            lastUpdateTime = DateFormat.getTimeInstance(DateFormat.SHORT).format(new Date());
+        }
+        lastStatus = status;
+
         AppWidgetManager manager = AppWidgetManager.getInstance(context);
         ComponentName component = new ComponentName(context, AirWidgetProvider.class);
         int[] ids = manager.getAppWidgetIds(component);
@@ -298,23 +304,30 @@ public class BleWidgetService extends Service {
         for (int id : ids) {
             RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.widget_air_monitor);
             views.setOnClickPendingIntent(R.id.widget_root, openAppIntent(context));
-            views.setTextViewText(R.id.widget_status, json == null ? status : "");
-            views.setViewVisibility(R.id.widget_status, json == null ? View.VISIBLE : View.GONE);
+            JSONObject visibleJson = lastJson;
+
+            views.setTextViewText(R.id.widget_footer, footerText(status));
+            views.setViewVisibility(R.id.widget_footer, View.VISIBLE);
             views.removeAllViews(R.id.table_rows);
 
-            if (json != null) {
-                Iterator<String> keys = json.keys();
-                while (keys.hasNext()) {
-                    String key = keys.next();
+            if (visibleJson != null) {
+                List<String> keys = jsonKeys(visibleJson);
+                Iterator<String> iterator = keys.iterator();
+                while (iterator.hasNext()) {
+                    String key = iterator.next();
                     RemoteViews row = new RemoteViews(context.getPackageName(), R.layout.widget_row);
                     row.setTextViewText(R.id.row_key, key);
-                    row.setTextViewText(R.id.row_value, String.valueOf(json.opt(key)));
+                    row.setTextViewText(R.id.row_value, String.valueOf(visibleJson.opt(key)));
                     views.addView(R.id.table_rows, row);
                 }
             }
 
             manager.updateAppWidget(id, views);
         }
+    }
+
+    public static void refreshWidgets(Context context) {
+        updateWidgets(context, lastJson, lastStatus == null ? context.getString(R.string.not_connected) : lastStatus);
     }
 
     private static PendingIntent openAppIntent(Context context) {
@@ -326,5 +339,28 @@ public class BleWidgetService extends Service {
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
+    }
+
+    private static List<String> jsonKeys(JSONObject json) {
+        List<String> keys = new ArrayList<>();
+        Iterator<String> iterator = json.keys();
+        while (iterator.hasNext()) {
+            keys.add(iterator.next());
+        }
+        return keys;
+    }
+
+    private static String footerText(String status) {
+        StringBuilder text = new StringBuilder();
+        if (status != null && !status.isEmpty()) {
+            text.append(status);
+        }
+        if (lastUpdateTime != null) {
+            if (text.length() > 0) {
+                text.append(" · ");
+            }
+            text.append("Last update: ").append(lastUpdateTime);
+        }
+        return text.toString();
     }
 }
