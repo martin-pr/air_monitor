@@ -11,7 +11,7 @@
 constexpr std::string_view SERVICE_UUID        = "f59c6ce6-b894-4e87-9c5b-b347b72c7e93";
 constexpr std::string_view CHARACTERISTIC_UUID = "3d455d99-f31a-4826-bf25-7c5f23cedc49";
 
-constexpr uint32_t NOTIFY_INTERVAL_MS = 2000;
+constexpr uint32_t NOTIFY_INTERVAL_MS = 30000;
 constexpr uint32_t BLINK_MS           = 50;
 constexpr size_t   JSON_BUF_SIZE      = 64;
 constexpr uint16_t BLE_MTU            = 512;
@@ -55,6 +55,8 @@ void setup() {
 void loop() {
     static uint32_t lastNotify = 0;
     uint32_t now = millis();
+
+    delay(10);
 
     if (deviceConnected && now - lastNotify >= NOTIFY_INTERVAL_MS) {
         lastNotify = now;
