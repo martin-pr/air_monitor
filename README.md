@@ -1,9 +1,10 @@
 # air_monitor
-ESP32-based air monitor
+ESP32-based air monitor (CO2, temperature, humidity) with BLE notifications.
 
 ## Hardware
 
-Seeed Studio XIAO ESP32-S3 Sense
+- Seeed Studio XIAO ESP32-S3 Sense
+- Sensirion SCD41 (CO2 / temperature / humidity, I2C)
 
 ## Prerequisites (one-time)
 
@@ -13,11 +14,13 @@ Install arduino-cli (official 64-bit binary, not the snap):
 curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
 ```
 
-Install the ESP32 board package:
+Install the ESP32 board package and required libraries:
 
 ```bash
 arduino-cli core update-index
 arduino-cli core install esp32:esp32
+arduino-cli lib install ArduinoJson
+arduino-cli lib install "Sensirion I2C SCD4x"
 ```
 
 Grant serial port access:
@@ -79,4 +82,69 @@ The device advertises as **Air Monitor** and exposes a single GATT service:
 | Service | `f59c6ce6-b894-4e87-9c5b-b347b72c7e93` |
 | Characteristic | `3d455d99-f31a-4826-bf25-7c5f23cedc49` |
 
-The characteristic is readable (up to 512 bytes). Currently returns `hello world`; intended to carry a JSON sensor payload (e.g. `{"co2":1234,"temp":23.5}`).
+The characteristic uses NOTIFY. The device pushes a JSON payload every 30 seconds:
+
+```json
+{"co2": 1234, "temp": 23.5, "rh": 45.1}
+```
+
+Connection parameters are negotiated to a 500ms–1s interval to reduce radio duty cycle. The first notification is sent ~5 seconds after the client subscribes (to allow time for CCCD write at the negotiated interval).
+
+## Power
+
+### Components
+
+| Component | Mode | Current |
+|---|---|---|
+| ESP32-S3 | BLE connected, light sleep | ~0.6–1.2 mA |
+| ESP32-S3 | BLE advertising, light sleep | ~2–2.5 mA |
+| SCD41 | Low-power periodic (30s, autonomous) | ~3.2 mA |
+| SCD41 | Single-shot on demand (ESP32-triggered) | ~0.5 mA idle + ~15 mA for ~5s |
+| LED | Per blink (50ms on, once per 30s notification) | negligible |
+
+### Battery estimates (400 mAh cell)
+
+| Scenario | Total current | Estimated life |
+|---|---|---|
+| Connected + SCD41 low-power periodic (30s) | ~4–4.5 mA | ~4 days |
+| Connected + SCD41 single-shot every 5 min | ~1.5–2 mA | ~8–11 days |
+| Connected, no sensor | ~0.6–1.2 mA | ~14–28 days |
+| Advertising only, no sensor | ~2–2.5 mA | ~7–8 days |
+
+### SCD41 measurement modes
+
+**Low-power periodic** (`start_low_power_periodic_measurement`): the sensor manages its own 30s duty cycle autonomously — active for ~5s, idle for ~25s, repeating. The ESP32 just reads the result over I2C before each BLE notification. Simple to integrate; ~3.2 mA average.
+
+**Single-shot** (`measure_single_shot`): sensor stays idle until the ESP32 triggers a measurement, waits ~5s for the result, then returns to idle. The ESP32 controls the interval. More complex but significantly lower average draw at long intervals (e.g. every 5 minutes). Trade-off: BLE clients receive cached readings between measurements rather than fresh ones.
+
+### Extending battery life
+
+The current firmware maintains a persistent BLE connection, which prevents the ESP32 radio from sleeping deeply. Two architectural approaches can significantly improve battery life:
+
+**Deep sleep between measurements**
+
+ESP32 deep sleeps at ~20 µA between cycles. On each wake:
+1. Trigger SCD41 single-shot measurement (~5s)
+2. Advertise, accept one connection, send notification, disconnect (~3–5s)
+3. Return to deep sleep for ~5 minutes
+
+Active ~10s out of every 300s → ~1 mA average total → **~17 days on 400 mAh**.
+
+Trade-off: no persistent connection. The Android client must scan and connect on demand rather than maintaining a subscription. A short advertising window on each wake (e.g. 10s) gives the app time to connect.
+
+**BLE advertisement beacon (no connection)**
+
+Encode sensor readings directly in the BLE advertisement packet (manufacturer-specific data). The client passively scans — no connection, no pairing, no GATT overhead.
+
+- Advertising burst: ~50ms every 5 minutes, then deep sleep
+- Average current: ~0.1 mA → **months on 400 mAh**
+
+Trade-off: payload limited to ~20 bytes (sufficient for CO2 + temp + RH as integers); iOS has restrictions on reading manufacturer data from unconnected peripherals; Android app must use a BLE scanner rather than a GATT client.
+
+**Comparison**
+
+| Approach | Avg current | 400 mAh |
+|---|---|---|
+| Current (always-connected + SCD41 periodic) | ~4.5 mA | ~4 days |
+| Deep sleep + connect-on-wake (5 min interval) | ~1 mA | ~17 days |
+| BLE advertisement beacon (5 min interval) | ~0.1 mA | months |
