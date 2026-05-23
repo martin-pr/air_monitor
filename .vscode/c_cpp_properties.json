@@ -1,0 +1,12 @@
+{
+    "configurations": [
+        {
+            "name": "ESP32",
+            "compileCommands": "${workspaceFolder}/firmware/build/sketch/compile_commands.json",
+            "intelliSenseMode": "gcc-arm",
+            "cStandard": "c17",
+            "cppStandard": "c++17"
+        }
+    ],
+    "version": 4
+}
