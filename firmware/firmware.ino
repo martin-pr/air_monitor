@@ -1,13 +1,20 @@
+#include <array>
+#include <string_view>
+
+#include <ArduinoJson.h>
+
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
 
-#define SERVICE_UUID        "f59c6ce6-b894-4e87-9c5b-b347b72c7e93"
-#define CHARACTERISTIC_UUID "3d455d99-f31a-4826-bf25-7c5f23cedc49"
+constexpr std::string_view SERVICE_UUID        = "f59c6ce6-b894-4e87-9c5b-b347b72c7e93";
+constexpr std::string_view CHARACTERISTIC_UUID = "3d455d99-f31a-4826-bf25-7c5f23cedc49";
 
-#define NOTIFY_INTERVAL_MS 2000
-#define BLINK_MS           50
+constexpr uint32_t NOTIFY_INTERVAL_MS = 2000;
+constexpr uint32_t BLINK_MS           = 50;
+constexpr size_t   JSON_BUF_SIZE      = 64;
+constexpr uint16_t BLE_MTU            = 512;
 
 BLECharacteristic *characteristic;
 bool deviceConnected = false;
@@ -26,19 +33,20 @@ void setup() {
     digitalWrite(LED_BUILTIN, HIGH);
     Serial.begin(115200);
 
+    BLEDevice::setMTU(BLE_MTU);
     BLEDevice::init("Air Monitor");
     BLEServer *server = BLEDevice::createServer();
     server->setCallbacks(new ServerCallbacks());
 
-    BLEService *service = server->createService(SERVICE_UUID);
+    BLEService *service = server->createService(SERVICE_UUID.data());
     characteristic = service->createCharacteristic(
-        CHARACTERISTIC_UUID,
+        CHARACTERISTIC_UUID.data(),
         BLECharacteristic::PROPERTY_NOTIFY
     );
     characteristic->addDescriptor(new BLE2902());
     service->start();
 
-    BLEDevice::getAdvertising()->addServiceUUID(SERVICE_UUID);
+    BLEDevice::getAdvertising()->addServiceUUID(SERVICE_UUID.data());
     BLEDevice::getAdvertising()->start();
 
     Serial.println("BLE advertising as 'Air Monitor'");
@@ -51,11 +59,16 @@ void loop() {
     if (deviceConnected && now - lastNotify >= NOTIFY_INTERVAL_MS) {
         lastNotify = now;
 
-        char buf[32];
-        snprintf(buf, sizeof(buf), "hello world %lu", counter++);
-        characteristic->setValue((uint8_t *)buf, strlen(buf));
+        JsonDocument doc;
+        doc["id"] = counter++;
+        doc["message"] = "hello world";
+
+        static std::array<char, JSON_BUF_SIZE> buf;
+        serializeJson(doc, buf.data(), buf.size());
+
+        characteristic->setValue((uint8_t *)buf.data(), strlen(buf.data()));
         characteristic->notify();
-        Serial.println(buf);
+        Serial.println(buf.data());
 
         digitalWrite(LED_BUILTIN, LOW);
         delay(BLINK_MS);
