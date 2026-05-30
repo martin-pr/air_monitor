@@ -53,10 +53,22 @@ public class BleWidgetService extends Service {
     private static String lastStatus;
     private static String lastUpdateTime;
 
+    private static final long SCAN_RESTART_MS = 3 * 60 * 1000;  // restart scan every 3 min if still not connected
+
     private final Handler handler = new Handler(Looper.getMainLooper());
     private BluetoothLeScanner scanner;
     private BluetoothGatt gatt;
     private boolean scanning;
+
+    private final Runnable scanRestart = new Runnable() {
+        @Override
+        public void run() {
+            if (gatt == null) {
+                stopScan();
+                startScan();
+            }
+        }
+    };
 
     @Override
     public void onCreate() {
@@ -108,9 +120,12 @@ public class BleWidgetService extends Service {
             .build();
         scanner.startScan(filters, settings, scanCallback);
         scanning = true;
+        handler.removeCallbacks(scanRestart);
+        handler.postDelayed(scanRestart, SCAN_RESTART_MS);
     }
 
     private void stopScan() {
+        handler.removeCallbacks(scanRestart);
         if (scanner != null && scanning && hasBlePermissions()) {
             scanner.stopScan(scanCallback);
         }
