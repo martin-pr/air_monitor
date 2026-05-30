@@ -17,9 +17,6 @@ constexpr uint16_t BLE_CONN_INTERVAL_MIN    = 400;  // units of 1.25ms = 500ms m
 constexpr uint16_t BLE_CONN_INTERVAL_MAX    = 800;  // units of 1.25ms = 1s maximum connection interval
 constexpr uint16_t BLE_SUPERVISION_TIMEOUT  = 500;  // units of 10ms; only fires on unclean drops — clean disconnects are immediate
 constexpr uint32_t SUBSCRIBE_DELAY_MS   = 5000;   // wait after connect before first notify; must cover CCCD write at 1s connection interval
-constexpr uint32_t BLINK_MS             = 50;     // LED on duration per notification blink
-constexpr uint32_t ADVERTISE_BLINK_MS   = 100;    // LED on duration per advertising blink
-constexpr uint32_t ADVERTISE_PERIOD_MS  = 1000;   // how often to blink while advertising
 constexpr size_t   JSON_BUF_SIZE        = 64;     // max bytes for serialized JSON payload
 constexpr uint16_t BLE_MTU              = 512;    // requested ATT MTU; negotiated with client at connect time
 
@@ -77,15 +74,9 @@ void sendNotification() {
     characteristic->setValue((uint8_t *)buf.data(), strlen(buf.data()));
     characteristic->notify();
     Serial.println(buf.data());
-
-    digitalWrite(LED_BUILTIN, LOW);
-    delay(BLINK_MS);
-    digitalWrite(LED_BUILTIN, HIGH);
 }
 
 void setup() {
-    pinMode(LED_BUILTIN, OUTPUT);
-    digitalWrite(LED_BUILTIN, HIGH);
     Serial.begin(115200);
 
     BLEDevice::setMTU(BLE_MTU);
@@ -110,7 +101,7 @@ void setup() {
     esp_pm_config_t pm = {
         .max_freq_mhz       = 80,   // reduce from 240MHz — plenty for BLE
         .min_freq_mhz       = 40,
-        .light_sleep_enable = true
+        .light_sleep_enable = true 
     };
     esp_pm_configure(&pm);
 
@@ -118,22 +109,10 @@ void setup() {
 }
 
 void loop() {
-    uint32_t now = millis();
-
     if (restartAdvertising) {
         restartAdvertising = false;
         delay(500);
         BLEDevice::getAdvertising()->start();
-    }
-
-    if (!deviceConnected) {
-        static uint32_t lastAdvertiseBlink = 0;
-        if (now - lastAdvertiseBlink >= ADVERTISE_PERIOD_MS) {
-            lastAdvertiseBlink = now;
-            digitalWrite(LED_BUILTIN, LOW);
-            delay(ADVERTISE_BLINK_MS);
-            digitalWrite(LED_BUILTIN, HIGH);
-        }
     }
 
     delay(100);

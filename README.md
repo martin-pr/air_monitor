@@ -3,7 +3,7 @@ ESP32-based air monitor (CO2, temperature, humidity) with BLE notifications.
 
 ## Hardware
 
-- Seeed Studio XIAO ESP32-S3 Sense
+- Seeed Studio XIAO ESP32-C3
 - Sensirion SCD41 (CO2 / temperature / humidity, I2C)
 
 ## Prerequisites (one-time)
@@ -39,11 +39,14 @@ cmake --build build
 cmake --build build --target flash
 ```
 
-To override the upload port:
+To override the upload port or target a different board:
 
 ```bash
 cmake -B build -DPORT=/dev/ttyACM1
+cmake -B build -DFQBN=esp32:esp32:XIAO_ESP32S3
 ```
+
+The default FQBN is `esp32:esp32:XIAO_ESP32C3`. The XIAO ESP32-C3 has no user-controllable LED; the firmware contains no LED code.
 
 ## Serial Monitor
 
@@ -51,11 +54,11 @@ cmake -B build -DPORT=/dev/ttyACM1
 arduino-cli monitor -p /dev/ttyACM0 -c baudrate=115200
 ```
 
-Press Enter once after connecting — the USB-Serial-JTAG peripheral (HWCDC) requires the host to send a byte before output appears. This is default arduino-esp32 3.x behavior.
+Press Enter once after connecting — the USB-Serial-JTAG peripheral requires the host to send a byte before output appears. This is default arduino-esp32 3.x behavior.
 
 ## Android Widget
 
-The `app` directory contains a minimal Android home-screen widget built directly with CMake and Android SDK command-line tools. It currently displays a single text field: `Hello world!`.
+The `app` directory contains an Android home-screen widget built with CMake and Android SDK command-line tools. It connects to the device over BLE and displays live sensor readings.
 
 Build the debug APK:
 
@@ -71,7 +74,9 @@ Install it on a connected Android device:
 adb install -r build/AirMonitorWidget-debug.apk
 ```
 
-After installing, add the **Air Monitor** widget from the Android launcher widget picker. If an older instance is already on the home screen, remove and add it again so the launcher reloads the widget metadata.
+After installing, add the **Air Monitor** widget from the Android launcher widget picker. If an older instance is already on the home screen, remove and re-add it so the launcher reloads the widget metadata.
+
+The app runs a foreground service (`connectedDevice` type) that scans for the device and maintains a GATT connection. The scan restarts every 3 minutes if not connected, which prevents it getting stuck after external tools (e.g. nRF Connect) temporarily take the connection.
 
 ## BLE
 
@@ -88,7 +93,7 @@ The characteristic uses NOTIFY. The device pushes a JSON payload every 30 second
 {"co2": 1234, "temp": 23.5, "rh": 45.1}
 ```
 
-Connection parameters are negotiated to a 500ms–1s interval to reduce radio duty cycle. The first notification is sent ~5 seconds after the client subscribes (to allow time for CCCD write at the negotiated interval).
+Connection parameters are negotiated to a 500ms–1s interval to reduce radio duty cycle. The first notification is sent ~5 seconds after the client subscribes (to allow time for the CCCD write at the negotiated interval).
 
 ## Power
 
@@ -96,11 +101,10 @@ Connection parameters are negotiated to a 500ms–1s interval to reduce radio du
 
 | Component | Mode | Current |
 |---|---|---|
-| ESP32-S3 | BLE connected, light sleep | ~0.6–1.2 mA |
-| ESP32-S3 | BLE advertising, light sleep | ~2–2.5 mA |
+| ESP32-C3 | BLE connected, light sleep | ~0.6–1.2 mA |
+| ESP32-C3 | BLE advertising, light sleep | ~2–2.5 mA |
 | SCD41 | Low-power periodic (30s, autonomous) | ~3.2 mA |
 | SCD41 | Single-shot on demand (ESP32-triggered) | ~0.5 mA idle + ~15 mA for ~5s |
-| LED | Per blink (50ms on, once per 30s notification) | negligible |
 
 ### Battery estimates (400 mAh cell)
 

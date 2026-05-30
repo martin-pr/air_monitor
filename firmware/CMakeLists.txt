@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(air_monitor LANGUAGES NONE)
 
-set(FQBN "esp32:esp32:XIAO_ESP32S3" CACHE STRING "Arduino FQBN")
+set(FQBN "esp32:esp32:XIAO_ESP32C3" CACHE STRING "Arduino FQBN")
 set(PORT "/dev/ttyACM0" CACHE STRING "Upload port")
 
 find_program(ARDUINO_CLI arduino-cli REQUIRED)
