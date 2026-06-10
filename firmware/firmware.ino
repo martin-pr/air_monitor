@@ -2,6 +2,8 @@
 #include <string_view>
 
 #include <ArduinoJson.h>
+#include <Wire.h>
+#include <SensirionI2cScd4x.h>
 
 #include <BLEDevice.h>
 #include <BLEServer.h>
@@ -20,6 +22,8 @@ constexpr uint32_t SUBSCRIBE_DELAY_MS   = 5000;   // wait after connect before f
 constexpr size_t   JSON_BUF_SIZE        = 64;     // max bytes for serialized JSON payload
 constexpr uint16_t BLE_MTU              = 512;    // requested ATT MTU; negotiated with client at connect time
 
+SensirionI2cScd4x scd4x;
+
 BLECharacteristic *characteristic;
 BLEServer *bleServer;
 
@@ -29,7 +33,6 @@ volatile bool     restartAdvertising = false;
 volatile uint32_t connectedAt        = 0;
 uint32_t lastNotify = 0;
 
-uint32_t counter    = 0;
 
 class CharacteristicCallbacks : public BLECharacteristicCallbacks {
     void onStatus(BLECharacteristic *c, Status s, uint32_t code) {
@@ -64,9 +67,25 @@ class ServerCallbacks : public BLEServerCallbacks {
 };
 
 void sendNotification() {
+    float temperature = 0.0f, humidity = 0.0f;
+    int16_t err = scd4x.measureSingleShotRhtOnly();
+    if (err == 0) {
+        delay(50);  // RHT-only measurement completes in ~50ms
+        bool dataReady = false;
+        for (int i = 0; i < 20 && !dataReady; i++) {
+            delay(10);
+            scd4x.getDataReadyStatus(dataReady);
+        }
+        if (dataReady) {
+            uint16_t co2dummy;
+            scd4x.readMeasurement(co2dummy, temperature, humidity);
+        }
+    }
+    Serial.printf("scd4x rht: err=%d temp=%.1f rh=%.1f\n", err, temperature, humidity);
+
     JsonDocument doc;
-    doc["id"] = counter++;
-    doc["message"] = "hello world";
+    doc["temp"] = serialized(String(temperature, 1));
+    doc["rh"]   = serialized(String(humidity, 1));
 
     static std::array<char, JSON_BUF_SIZE> buf;
     serializeJson(doc, buf.data(), buf.size());
@@ -78,6 +97,10 @@ void sendNotification() {
 
 void setup() {
     Serial.begin(115200);
+
+    Wire.begin();
+    scd4x.begin(Wire, SCD41_I2C_ADDR_62);
+    scd4x.stopPeriodicMeasurement();  // clear any leftover state from before power cycle
 
     BLEDevice::setMTU(BLE_MTU);
     BLEDevice::init("Air Monitor");
