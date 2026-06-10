@@ -67,23 +67,17 @@ class ServerCallbacks : public BLEServerCallbacks {
 };
 
 void sendNotification() {
+    uint16_t co2 = 0;
     float temperature = 0.0f, humidity = 0.0f;
-    int16_t err = scd4x.measureSingleShotRhtOnly();
-    if (err == 0) {
-        delay(50);  // RHT-only measurement completes in ~50ms
-        bool dataReady = false;
-        for (int i = 0; i < 20 && !dataReady; i++) {
-            delay(10);
-            scd4x.getDataReadyStatus(dataReady);
-        }
-        if (dataReady) {
-            uint16_t co2dummy;
-            scd4x.readMeasurement(co2dummy, temperature, humidity);
-        }
+    bool dataReady = false;
+    scd4x.getDataReadyStatus(dataReady);
+    if (dataReady) {
+        scd4x.readMeasurement(co2, temperature, humidity);
     }
-    Serial.printf("scd4x rht: err=%d temp=%.1f rh=%.1f\n", err, temperature, humidity);
+    Serial.printf("scd4x: co2=%d temp=%.1f rh=%.1f\n", co2, temperature, humidity);
 
     JsonDocument doc;
+    doc["co2"]  = co2;
     doc["temp"] = serialized(String(temperature, 1));
     doc["rh"]   = serialized(String(humidity, 1));
 
@@ -101,6 +95,7 @@ void setup() {
     Wire.begin();
     scd4x.begin(Wire, SCD41_I2C_ADDR_62);
     scd4x.stopPeriodicMeasurement();  // clear any leftover state from before power cycle
+    scd4x.startLowPowerPeriodicMeasurement();
 
     BLEDevice::setMTU(BLE_MTU);
     BLEDevice::init("Air Monitor");
