@@ -5,6 +5,7 @@ ESP32-based air monitor (CO2, temperature, humidity) with BLE notifications.
 
 - Seeed Studio XIAO ESP32-C3
 - Sensirion SCD41 (CO2 / temperature / humidity, I2C)
+- WeAct 200×200 ePaper module (SPI)
 
 ## Prerequisites (one-time)
 
@@ -21,6 +22,8 @@ arduino-cli core update-index
 arduino-cli core install esp32:esp32
 arduino-cli lib install ArduinoJson
 arduino-cli lib install "Sensirion I2C SCD4x"
+arduino-cli lib install GxEPD2
+arduino-cli lib install "Adafruit GFX Library"
 ```
 
 Grant serial port access:
@@ -94,6 +97,38 @@ The characteristic uses NOTIFY. The device pushes a JSON payload every 30 second
 ```
 
 Connection parameters are negotiated to a 500ms–1s interval to reduce radio duty cycle. The first notification is sent ~5 seconds after the client subscribes (to allow time for the CCCD write at the negotiated interval).
+
+## Wiring
+
+### SCD41 (I2C)
+
+| SCD41 pin | XIAO pin | GPIO |
+|---|---|---|
+| VDD | 3V3 | — |
+| GND | GND | — |
+| SDA | D4 | GPIO6 |
+| SCL | D5 | GPIO7 |
+
+A decoupling capacitor between VDD and GND is required for stable CO2 readings. The NDIR laser draws a brief high current spike; without sufficient capacitance the CO2 measurement fails while RH/temp continue to work. The tested working combination is a 10 µF ceramic and a 100 µF electrolytic in parallel.
+
+### ePaper Display (SPI)
+
+The WeAct 200×200 module connects over SPI. Despite the silkscreen labels (SCL/SDA), these are SPI signals — not I2C.
+
+| WeAct pin | XIAO pin | GPIO |
+|---|---|---|
+| VCC | 3V3 | — |
+| GND | GND | — |
+| SDA | D10 | GPIO10 (MOSI) |
+| SCL | D8 | GPIO8 (SCK) |
+| CS | D3 | GPIO5 |
+| D/C | D2 | GPIO4 |
+| RES | D1 | GPIO3 |
+| BUSY | D0 | GPIO2 |
+
+Pins D6, D7, and D9 remain free after this wiring.
+
+The display is driven by [GxEPD2](https://github.com/ZinggJM/GxEPD2) using the `GxEPD2_154_D67` driver class.
 
 ## Power
 
