@@ -5,7 +5,7 @@
 #define EPD_CS   5
 #define EPD_DC   4
 #define EPD_RST  3
-#define EPD_BUSY 2
+#define EPD_BUSY 21
 #define SPI_SCK  8
 #define SPI_MOSI 10
 #define SPI_MISO 9

@@ -31,7 +31,7 @@ constexpr uint16_t BLE_MTU              = 512;    // requested ATT MTU; negotiat
 constexpr int EPD_CS   = 5;   // D3
 constexpr int EPD_DC   = 4;   // D2
 constexpr int EPD_RST  = 3;   // D1
-constexpr int EPD_BUSY = 2;   // D0
+constexpr int EPD_BUSY = 21;  // D6
 constexpr int SPI_SCK  = 8;   // D8
 constexpr int SPI_MOSI = 10;  // D10
 

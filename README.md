@@ -124,9 +124,9 @@ The WeAct 200×200 module connects over SPI. Despite the silkscreen labels (SCL/
 | CS | D3 | GPIO5 |
 | D/C | D2 | GPIO4 |
 | RES | D1 | GPIO3 |
-| BUSY | D0 | GPIO2 |
+| BUSY | D6 | GPIO21 |
 
-Pins D6, D7, and D9 remain free after this wiring.
+Pins D0, D7, and D9 remain free after this wiring.
 
 The display is driven by [GxEPD2](https://github.com/ZinggJM/GxEPD2) using the `GxEPD2_154_D67` driver class.
 
