@@ -35,6 +35,22 @@ constexpr int EPD_BUSY = 21;  // D6
 constexpr int SPI_SCK  = 8;   // D8
 constexpr int SPI_MOSI = 10;  // D10
 
+// ePaper layout (200×200 square panel)
+constexpr int EPD_W        = 200;
+constexpr int EPD_H        = 200;
+constexpr int EPD_MARGIN   = 4;             // inset from all edges
+constexpr int EPD_TOP_Y    = 22;            // baseline for top-row labels
+constexpr int EPD_BOTTOM_Y = EPD_H - EPD_MARGIN;  // baseline for bottom-row label
+constexpr int EPD_CO2_Y    = 103;           // vertical centre target for large CO2 number
+
+// SCD41 data-ready polling
+constexpr uint32_t SCD4X_READY_TIMEOUT_MS = 2000;  // max wait per cycle for a fresh measurement
+constexpr uint32_t SCD4X_READY_POLL_MS    = 100;
+
+// Loop timing
+constexpr uint32_t LOOP_TICK_MS         = 100;
+constexpr uint32_t RESTART_ADV_DELAY_MS = 500;
+
 SensirionI2cScd4x scd4x;
 
 BLECharacteristic *characteristic;
@@ -99,49 +115,61 @@ void updateDisplay(uint16_t co2, float temperature, float humidity) {
         display.setTextColor(GxEPD_BLACK);
 
         // Top-left: temperature + degree circle + C
+        // FreeSans doesn't include 0xB0 (degree); draw a small circle instead
         display.setFont(&FreeSans12pt7b);
         display.setTextSize(1);
-        display.setCursor(4, 22);
+        display.setCursor(EPD_MARGIN, EPD_TOP_Y);
         display.print(tempStr);
         int16_t cx = display.getCursorX();
-        display.drawCircle(cx + 3, 8, 2, GxEPD_BLACK);  // degree symbol
-        display.setCursor(cx + 7, 22);
+        display.drawCircle(cx + 3, 8, 2, GxEPD_BLACK);
+        display.setCursor(cx + 7, EPD_TOP_Y);
         display.print("C");
 
         // Top-right: humidity, right-aligned
         display.setFont(&FreeSans12pt7b);
         display.setTextSize(1);
         display.getTextBounds(rhStr, 0, 0, &x1, &y1, &tw, &th);
-        display.setCursor(196 - (int16_t)tw, 22);
+        display.setCursor(EPD_W - EPD_MARGIN - (int16_t)tw, EPD_TOP_Y);
         display.print(rhStr);
 
-        // Center: large CO2 number (24pt × 2)
+        // Centre: large CO2 number (24pt × 2 via setTextSize)
         display.setFont(&FreeSansBold24pt7b);
         display.setTextSize(2);
         display.getTextBounds(co2Str, 0, 0, &x1, &y1, &tw, &th);
-        display.setCursor((200 - (int16_t)tw) / 2 - x1,
-                          103 - y1 - (int16_t)th / 2);
+        display.setCursor((EPD_W - (int16_t)tw) / 2 - x1,
+                          EPD_CO2_Y - y1 - (int16_t)th / 2);
         display.print(co2Str);
 
-        // Bottom-right: "CO2 (ppm)" label
+        // Bottom-right: unit label
         display.setFont(&FreeSans12pt7b);
         display.setTextSize(1);
         display.getTextBounds("CO2 (ppm)", 0, 0, &x1, &y1, &tw, &th);
-        display.setCursor(196 - (int16_t)tw, 196);
+        display.setCursor(EPD_W - EPD_MARGIN - (int16_t)tw, EPD_BOTTOM_Y);
         display.print("CO2 (ppm)");
 
     } while (display.nextPage());
 }
 
 void sendNotification() {
-    uint16_t co2 = 0;
-    float temperature = 0.0f, humidity = 0.0f;
+    // Statics retain the last good reading so the display never shows zeros
+    // after the first successful measurement.
+    static uint16_t co2 = 0;
+    static float temperature = 0.0f, humidity = 0.0f;
+
+    // The SCD41 runs on its own autonomous 30s clock, independent of our
+    // notify interval. Poll briefly so a small phase offset doesn't cause
+    // us to arrive just before data is ready.
     bool dataReady = false;
-    scd4x.getDataReadyStatus(dataReady);
+    uint32_t start = millis();
+    while (!dataReady && millis() - start < SCD4X_READY_TIMEOUT_MS) {
+        scd4x.getDataReadyStatus(dataReady);
+        if (!dataReady) delay(SCD4X_READY_POLL_MS);
+    }
     if (dataReady) {
         scd4x.readMeasurement(co2, temperature, humidity);
     }
-    Serial.printf("scd4x: co2=%d temp=%.1f rh=%.1f\n", co2, temperature, humidity);
+    Serial.printf("scd4x: co2=%d temp=%.1f rh=%.1f%s\n", co2, temperature, humidity,
+                  dataReady ? "" : " [cached]");
 
     JsonDocument doc;
     doc["co2"]  = co2;
@@ -216,11 +244,11 @@ void setup() {
 void loop() {
     if (restartAdvertising) {
         restartAdvertising = false;
-        delay(500);
+        delay(RESTART_ADV_DELAY_MS);
         BLEDevice::getAdvertising()->start();
     }
 
-    delay(100);
+    delay(LOOP_TICK_MS);
 
     if (deviceConnected) {
         uint32_t now2 = millis();
