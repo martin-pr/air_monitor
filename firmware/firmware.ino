@@ -206,8 +206,8 @@ void sendNotification() {
 
     JsonDocument doc;
     doc["co2"]  = co2;
-    doc["temp"] = serialized(String(temperature, 1));
-    doc["rh"]   = serialized(String(humidity, 1));
+    doc["temp"] = round(temperature * 10) / 10.0f;
+    doc["rh"]   = round(humidity * 10) / 10.0f;
     doc["bat"]  = batPct;
 
     static std::array<char, JSON_BUF_SIZE> buf;

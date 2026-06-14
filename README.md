@@ -93,7 +93,7 @@ The device advertises as **Air Monitor** and exposes a single GATT service:
 The characteristic uses NOTIFY. The device pushes a JSON payload every 30 seconds:
 
 ```json
-{"co2": 1234, "temp": "23.5", "rh": "45.1", "bat": 85}
+{"co2": 1234, "temp": 23.5, "rh": 45.1, "bat": 85}
 ```
 
 Connection parameters are negotiated to a 500ms–1s interval to reduce radio duty cycle. The first notification is sent ~5 seconds after the client subscribes (to allow time for the CCCD write at the negotiated interval).
