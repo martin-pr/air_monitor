@@ -51,6 +51,31 @@ constexpr uint32_t SCD4X_READY_POLL_MS    = 100;
 constexpr uint32_t LOOP_TICK_MS         = 100;
 constexpr uint32_t RESTART_ADV_DELAY_MS = 500;
 
+// Battery ADC
+constexpr int BAT_PIN = A0;  // D0/GPIO2; reads through 220k+220k divider (ratio 1:2)
+
+struct BatPoint { float voltage; uint8_t pct; };
+constexpr std::array<BatPoint, 4> BAT_CURVE = {{
+    {4.20f, 100},
+    {3.98f,  80},
+    {3.52f,  20},
+    {3.00f,   0},
+}};
+
+uint8_t readBatteryPercent() {
+    float vbat = analogReadMilliVolts(BAT_PIN) * 2.0f / 1000.0f;
+    if (vbat >= BAT_CURVE.front().voltage) return 100;
+    if (vbat <= BAT_CURVE.back().voltage)  return 0;
+    for (size_t i = 0; i < BAT_CURVE.size() - 1; i++) {
+        if (vbat >= BAT_CURVE[i + 1].voltage) {
+            float t = (vbat - BAT_CURVE[i + 1].voltage) /
+                      (BAT_CURVE[i].voltage - BAT_CURVE[i + 1].voltage);
+            return (uint8_t)(BAT_CURVE[i + 1].pct + t * (BAT_CURVE[i].pct - BAT_CURVE[i + 1].pct));
+        }
+    }
+    return 0;
+}
+
 SensirionI2cScd4x scd4x;
 
 BLECharacteristic *characteristic;
@@ -99,11 +124,12 @@ class ServerCallbacks : public BLEServerCallbacks {
     void onDisconnect(BLEServer *server) { deviceConnected = false; restartAdvertising = true; }
 };
 
-void updateDisplay(uint16_t co2, float temperature, float humidity) {
-    char co2Str[8], tempStr[8], rhStr[12];
+void updateDisplay(uint16_t co2, float temperature, float humidity, uint8_t batPct) {
+    char co2Str[8], tempStr[8], rhStr[12], batStr[6];
     snprintf(co2Str, sizeof(co2Str), "%d", co2);
     snprintf(tempStr, sizeof(tempStr), "%.1f", temperature);
     snprintf(rhStr,  sizeof(rhStr),  "%.1f%%", humidity);
+    snprintf(batStr, sizeof(batStr), "%d%%", batPct);
 
     int16_t x1, y1;
     uint16_t tw, th;
@@ -140,6 +166,12 @@ void updateDisplay(uint16_t co2, float temperature, float humidity) {
                           EPD_CO2_Y - y1 - (int16_t)th / 2);
         display.print(co2Str);
 
+        // Bottom-left: battery %
+        display.setFont(&FreeSans12pt7b);
+        display.setTextSize(1);
+        display.setCursor(EPD_MARGIN, EPD_BOTTOM_Y);
+        display.print(batStr);
+
         // Bottom-right: unit label
         display.setFont(&FreeSans12pt7b);
         display.setTextSize(1);
@@ -155,6 +187,7 @@ void sendNotification() {
     // after the first successful measurement.
     static uint16_t co2 = 0;
     static float temperature = 0.0f, humidity = 0.0f;
+    uint8_t batPct = readBatteryPercent();
 
     // The SCD41 runs on its own autonomous 30s clock, independent of our
     // notify interval. Poll briefly so a small phase offset doesn't cause
@@ -175,6 +208,7 @@ void sendNotification() {
     doc["co2"]  = co2;
     doc["temp"] = serialized(String(temperature, 1));
     doc["rh"]   = serialized(String(humidity, 1));
+    doc["bat"]  = batPct;
 
     static std::array<char, JSON_BUF_SIZE> buf;
     serializeJson(doc, buf.data(), buf.size());
@@ -183,11 +217,13 @@ void sendNotification() {
     characteristic->notify();
     Serial.println(buf.data());
 
-    updateDisplay(co2, temperature, humidity);
+    updateDisplay(co2, temperature, humidity, batPct);
 }
 
 void setup() {
     Serial.begin(115200);
+
+    analogSetAttenuation(ADC_11db);  // 0–3.9 V range; covers 1.5–2.1 V from the battery divider
 
     Wire.begin();
     scd4x.begin(Wire, SCD41_I2C_ADDR_62);

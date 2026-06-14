@@ -93,7 +93,7 @@ The device advertises as **Air Monitor** and exposes a single GATT service:
 The characteristic uses NOTIFY. The device pushes a JSON payload every 30 seconds:
 
 ```json
-{"co2": 1234, "temp": 23.5, "rh": 45.1}
+{"co2": 1234, "temp": "23.5", "rh": "45.1", "bat": 85}
 ```
 
 Connection parameters are negotiated to a 500ms–1s interval to reduce radio duty cycle. The first notification is sent ~5 seconds after the client subscribes (to allow time for the CCCD write at the negotiated interval).
@@ -142,13 +142,18 @@ Battery+ ──[R2 220kΩ]──┬── D0 (GPIO2, ADC)
                        GND
 ```
 
-| Battery voltage | Voltage at D0 |
-|---|---|
-| 4.2 V (full) | 2.10 V |
-| 3.7 V (nominal) | 1.85 V |
-| 3.0 V (cutoff) | 1.50 V |
-
 Read with ADC 11 dB attenuation (0–3.9 V input range). The quiescent current through the divider is 4.2 V / 440 kΩ ≈ 10 µA — negligible.
+
+Voltage is converted to a battery percentage using a 4-point lookup table with linear interpolation between segments:
+
+| % | Battery V | V at D0 |
+|---|---|---|
+| 100 | 4.20 | 2.10 |
+| 80 | 3.98 | 1.99 |
+| 20 | 3.52 | 1.76 |
+| 0 | 3.00 | 1.50 |
+
+The middle segment (20–80%) approximates the flat part of the LiPo discharge curve; the steeper drops at each end get their own segments.
 
 ## Power
 
