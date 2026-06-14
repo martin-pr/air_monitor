@@ -126,9 +126,29 @@ The WeAct 200×200 module connects over SPI. Despite the silkscreen labels (SCL/
 | RES | D1 | GPIO3 |
 | BUSY | D6 | GPIO21 |
 
-Pins D7 and D9 remain free after this wiring. D0 is used for battery voltage monitoring (voltage divider to ADC).
+Pins D7 and D9 remain free after this wiring.
 
 The display is driven by [GxEPD2](https://github.com/ZinggJM/GxEPD2) using the `GxEPD2_154_D67` driver class.
+
+### Battery (J1 + voltage divider)
+
+A JST connector (J1) brings in the LiPo battery. Two 220 kΩ resistors (R1, R2) form a 1:2 voltage divider so the full battery voltage range fits within the ESP32-C3 ADC input range:
+
+```
+Battery+ ──[R2 220kΩ]──┬── D0 (GPIO2, ADC)
+                        │
+                    [R1 220kΩ]
+                        │
+                       GND
+```
+
+| Battery voltage | Voltage at D0 |
+|---|---|
+| 4.2 V (full) | 2.10 V |
+| 3.7 V (nominal) | 1.85 V |
+| 3.0 V (cutoff) | 1.50 V |
+
+Read with ADC 11 dB attenuation (0–3.9 V input range). The quiescent current through the divider is 4.2 V / 440 kΩ ≈ 10 µA — negligible.
 
 ## Power
 
