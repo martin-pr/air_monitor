@@ -138,23 +138,25 @@ The display is driven by [GxEPD2](https://github.com/ZinggJM/GxEPD2) using the `
 |---|---|---|
 | ESP32-C3 | BLE connected, light sleep | ~0.6–1.2 mA |
 | ESP32-C3 | BLE advertising, light sleep | ~2–2.5 mA |
-| SCD41 | Low-power periodic (30s, autonomous) | ~3.2 mA |
-| SCD41 | Single-shot on demand (ESP32-triggered) | ~0.5 mA idle + ~15 mA for ~5s |
+| SCD41 | Periodic (5s, continuous) | 15–18 mA @ 3.3 V (datasheet) |
+| SCD41 | Low-power periodic (30s, autonomous) | 3.2–3.5 mA @ 3.3 V (datasheet) |
+| SCD41 | Single-shot (5 min interval average) | 0.45–0.5 mA @ 3.3 V (datasheet) |
 
 ### Battery estimates (400 mAh cell)
 
 | Scenario | Total current | Estimated life |
 |---|---|---|
-| Connected + SCD41 low-power periodic (30s) | ~4–4.5 mA | ~4 days |
-| Connected + SCD41 single-shot every 5 min | ~1.5–2 mA | ~8–11 days |
+| Connected + SCD41 low-power periodic (30s) | ~4–5 mA | ~3–4 days |
 | Connected, no sensor | ~0.6–1.2 mA | ~14–28 days |
 | Advertising only, no sensor | ~2–2.5 mA | ~7–8 days |
 
 ### SCD41 measurement modes
 
-**Low-power periodic** (`start_low_power_periodic_measurement`): the sensor manages its own 30s duty cycle autonomously — active for ~5s, idle for ~25s, repeating. The ESP32 just reads the result over I2C before each BLE notification. Simple to integrate; ~3.2 mA average.
+**Low-power periodic** (`start_low_power_periodic_measurement`): the sensor manages its own 30s duty cycle autonomously — active for ~5s, idle for ~25s, repeating. The ESP32 just reads the result over I2C before each BLE notification. Simple to integrate; 3.2–3.5 mA average per datasheet.
 
-**Single-shot** (`measure_single_shot`): sensor stays idle until the ESP32 triggers a measurement, waits ~5s for the result, then returns to idle. The ESP32 controls the interval. More complex but significantly lower average draw at long intervals (e.g. every 5 minutes). Trade-off: BLE clients receive cached readings between measurements rather than fresh ones.
+**Single-shot** (`measure_single_shot`): sensor stays idle until the ESP32 triggers a measurement, waits ~5s for the result, then returns to idle. The ESP32 controls the interval. At a 5-minute interval the datasheet-measured average is 0.45–0.5 mA. Trade-off: BLE clients receive cached readings between measurements rather than fresh ones.
+
+Automatic Self-Calibration (ASC) works with single-shot via the software `power_down` / `wake_up` commands, which preserve calibration state in the sensor's SRAM. Hard VDD power-cycling breaks ASC because SRAM is lost. The datasheet optimises ASC for a 5-minute measurement interval and requires the sensor to see outdoor-level CO2 (~400 ppm) at least once per week; the first reading after any power cycle should be discarded.
 
 ### Extending battery life
 
@@ -167,7 +169,7 @@ ESP32 deep sleeps at ~20 µA between cycles. On each wake:
 2. Advertise, accept one connection, send notification, disconnect (~3–5s)
 3. Return to deep sleep for ~5 minutes
 
-Active ~10s out of every 300s → ~1 mA average total → **~17 days on 400 mAh**.
+Active ~10s out of every 300s: ESP32 at ~20 mA × (10/300) ≈ 0.7 mA average + SCD41 single-shot 0.5 mA average = **~1.2 mA total → ~14 days on 400 mAh**.
 
 Trade-off: no persistent connection. The Android client must scan and connect on demand rather than maintaining a subscription. A short advertising window on each wake (e.g. 10s) gives the app time to connect.
 
@@ -184,6 +186,6 @@ Trade-off: payload limited to ~20 bytes (sufficient for CO2 + temp + RH as integ
 
 | Approach | Avg current | 400 mAh |
 |---|---|---|
-| Current (always-connected + SCD41 periodic) | ~4.5 mA | ~4 days |
-| Deep sleep + connect-on-wake (5 min interval) | ~1 mA | ~17 days |
+| Current (always-connected + SCD41 low-power periodic) | ~4–5 mA | ~3–4 days |
+| Deep sleep + connect-on-wake (5 min interval) | ~1.2 mA | ~14 days |
 | BLE advertisement beacon (5 min interval) | ~0.1 mA | months |
