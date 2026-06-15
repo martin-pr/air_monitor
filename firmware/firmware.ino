@@ -5,6 +5,8 @@
 #include <Wire.h>
 #include <SensirionI2cScd4x.h>
 
+#include <WiFi.h>
+
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
@@ -15,6 +17,8 @@
 #include <GxEPD2_BW.h>
 #include <Fonts/FreeSans12pt7b.h>
 #include <Fonts/FreeSansBold24pt7b.h>
+
+constexpr bool BLE_ENABLED = true;
 
 constexpr std::string_view SERVICE_UUID        = "f59c6ce6-b894-4e87-9c5b-b347b72c7e93";  // randomly generated
 constexpr std::string_view CHARACTERISTIC_UUID = "3d455d99-f31a-4826-bf25-7c5f23cedc49";  // randomly generated
@@ -213,8 +217,10 @@ void sendNotification() {
     static std::array<char, JSON_BUF_SIZE> buf;
     serializeJson(doc, buf.data(), buf.size());
 
-    characteristic->setValue((uint8_t *)buf.data(), strlen(buf.data()));
-    characteristic->notify();
+    if (BLE_ENABLED) {
+        characteristic->setValue((uint8_t *)buf.data(), strlen(buf.data()));
+        characteristic->notify();
+    }
     Serial.println(buf.data());
 
     updateDisplay(co2, temperature, humidity, batPct);
@@ -248,24 +254,28 @@ void setup() {
         display.print("Monitor");
     } while (display.nextPage());
 
-    BLEDevice::setMTU(BLE_MTU);
-    BLEDevice::init("Air Monitor");
-    bleServer = BLEDevice::createServer();
-    bleServer->setCallbacks(new ServerCallbacks());
+    if (BLE_ENABLED) {
+        WiFi.mode(WIFI_OFF);
+        
+        BLEDevice::setMTU(BLE_MTU);
+        BLEDevice::init("Air Monitor");
+        bleServer = BLEDevice::createServer();
+        bleServer->setCallbacks(new ServerCallbacks());
 
-    BLEService *service = bleServer->createService(SERVICE_UUID.data());
-    characteristic = service->createCharacteristic(
-        CHARACTERISTIC_UUID.data(),
-        BLECharacteristic::PROPERTY_NOTIFY
-    );
-    characteristic->setCallbacks(new CharacteristicCallbacks());
-    BLE2902 *cccd = new BLE2902();
-    cccd->setCallbacks(new CCCDCallbacks());
-    characteristic->addDescriptor(cccd);
-    service->start();
+        BLEService *service = bleServer->createService(SERVICE_UUID.data());
+        characteristic = service->createCharacteristic(
+            CHARACTERISTIC_UUID.data(),
+            BLECharacteristic::PROPERTY_NOTIFY
+        );
+        characteristic->setCallbacks(new CharacteristicCallbacks());
+        BLE2902 *cccd = new BLE2902();
+        cccd->setCallbacks(new CCCDCallbacks());
+        characteristic->addDescriptor(cccd);
+        service->start();
 
-    BLEDevice::getAdvertising()->addServiceUUID(SERVICE_UUID.data());
-    BLEDevice::getAdvertising()->start();
+        BLEDevice::getAdvertising()->addServiceUUID(SERVICE_UUID.data());
+        BLEDevice::getAdvertising()->start();
+    }
 
     esp_pm_config_t pm = {
         .max_freq_mhz       = 80,   // reduce from 240MHz — plenty for BLE
@@ -278,7 +288,7 @@ void setup() {
 }
 
 void loop() {
-    if (restartAdvertising) {
+    if (BLE_ENABLED && restartAdvertising) {
         restartAdvertising = false;
         delay(RESTART_ADV_DELAY_MS);
         BLEDevice::getAdvertising()->start();
@@ -286,7 +296,7 @@ void loop() {
 
     delay(LOOP_TICK_MS);
 
-    if (deviceConnected) {
+    if (BLE_ENABLED && deviceConnected) {
         uint32_t now2 = millis();
         if (connectedAt > 0 && now2 - connectedAt >= SUBSCRIBE_DELAY_MS) {
             sendNotification();
