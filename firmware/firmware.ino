@@ -128,6 +128,21 @@ class ServerCallbacks : public BLEServerCallbacks {
     void onDisconnect(BLEServer *server) { deviceConnected = false; restartAdvertising = true; }
 };
 
+void showStatus(const char* msg) {
+    static int16_t y = 20;
+    display.setPartialWindow(0, y - 18, EPD_W, 28);
+    display.firstPage();
+    do {
+        display.fillScreen(GxEPD_WHITE);
+        display.setTextColor(GxEPD_BLACK);
+        display.setFont(&FreeSans12pt7b);
+        display.setTextSize(1);
+        display.setCursor(EPD_MARGIN, y);
+        display.print(msg);
+    } while (display.nextPage());
+    y += 28;
+}
+
 void updateDisplay(uint16_t co2, float temperature, float humidity, uint8_t batPct) {
     char co2Str[8], tempStr[8], rhStr[12], batStr[6];
     snprintf(co2Str, sizeof(co2Str), "%d", co2);
@@ -240,25 +255,22 @@ void setup() {
     display.init(115200);
     display.setRotation(1);
 
-    // Splash screen while BLE initialises
     display.setFullWindow();
     display.firstPage();
-    do {
-        display.fillScreen(GxEPD_WHITE);
-        display.setTextColor(GxEPD_BLACK);
-        display.setFont(&FreeSansBold24pt7b);
-        display.setTextSize(1);
-        display.setCursor(10, 110);
-        display.print("Air");
-        display.setCursor(10, 150);
-        display.print("Monitor");
-    } while (display.nextPage());
+    do { display.fillScreen(GxEPD_WHITE); } while (display.nextPage());
+
+    showStatus("1: display ok");
 
     if (BLE_ENABLED) {
+        showStatus("2: wifi off...");
         WiFi.mode(WIFI_OFF);
-        
+        delay(200);
+
+        showStatus("3: ble init...");
         BLEDevice::setMTU(BLE_MTU);
         BLEDevice::init("Air Monitor");
+
+        showStatus("4: ble server...");
         bleServer = BLEDevice::createServer();
         bleServer->setCallbacks(new ServerCallbacks());
 
@@ -273,8 +285,13 @@ void setup() {
         characteristic->addDescriptor(cccd);
         service->start();
 
+        showStatus("5: advertising...");
         BLEDevice::getAdvertising()->addServiceUUID(SERVICE_UUID.data());
+        BLEDevice::getAdvertising()->setMinInterval(1600);  // 1s (units of 0.625ms)
+        BLEDevice::getAdvertising()->setMaxInterval(2000);  // 1.25s
         BLEDevice::getAdvertising()->start();
+
+        showStatus("6: ready");
     }
 
     esp_pm_config_t pm = {
@@ -296,13 +313,16 @@ void loop() {
 
     delay(LOOP_TICK_MS);
 
+    uint32_t now = millis();
     if (BLE_ENABLED && deviceConnected) {
-        uint32_t now2 = millis();
-        if (connectedAt > 0 && now2 - connectedAt >= SUBSCRIBE_DELAY_MS) {
+        if (connectedAt > 0 && now - connectedAt >= SUBSCRIBE_DELAY_MS) {
             sendNotification();
-        } else if (connectedAt == 0 && now2 - lastNotify >= NOTIFY_INTERVAL_MS) {
-            lastNotify = now2;
+        } else if (connectedAt == 0 && now - lastNotify >= NOTIFY_INTERVAL_MS) {
+            lastNotify = now;
             sendNotification();
         }
+    } else if (now - lastNotify >= NOTIFY_INTERVAL_MS) {
+        lastNotify = now;
+        sendNotification();
     }
 }
