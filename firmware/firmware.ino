@@ -1,5 +1,6 @@
 #include <array>
 #include <string_view>
+#include <esp_system.h>
 
 #include <ArduinoJson.h>
 #include <Wire.h>
@@ -258,6 +259,17 @@ void setup() {
     display.setFullWindow();
     display.firstPage();
     do { display.fillScreen(GxEPD_WHITE); } while (display.nextPage());
+
+    // Show reset reason so we know if it's brownout, crash, or watchdog
+    switch (esp_reset_reason()) {
+        case ESP_RST_BROWNOUT: showStatus("RST: brownout");   break;
+        case ESP_RST_PANIC:    showStatus("RST: panic");      break;
+        case ESP_RST_TASK_WDT: showStatus("RST: task wdt");   break;
+        case ESP_RST_INT_WDT:  showStatus("RST: int wdt");    break;
+        case ESP_RST_WDT:      showStatus("RST: rtc wdt");    break;
+        case ESP_RST_SW:       showStatus("RST: software");   break;
+        default:               showStatus("RST: poweron/pin"); break;
+    }
 
     showStatus("1: display ok");
 
