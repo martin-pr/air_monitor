@@ -47,6 +47,10 @@ constexpr int EPD_MARGIN   = 4;             // inset from all edges
 constexpr int EPD_TOP_Y    = 22;            // baseline for top-row labels
 constexpr int EPD_BOTTOM_Y = EPD_H - EPD_MARGIN;  // baseline for bottom-row label
 constexpr int EPD_CO2_Y    = 103;           // vertical centre target for large CO2 number
+constexpr int STATUS_FIRST_Y = 20;
+constexpr int STATUS_LINE_STEP = 29;        // FreeSans12pt7b yAdvance
+constexpr uint32_t STATUS_STEP_DELAY_MS = 500;  // required to avoid power spikes
+constexpr size_t MAX_STATUS_LINES = 8;
 
 // SCD41 data-ready polling
 constexpr uint32_t SCD4X_READY_TIMEOUT_MS = 2000;  // max wait per cycle for a fresh measurement
@@ -130,18 +134,31 @@ class ServerCallbacks : public BLEServerCallbacks {
 };
 
 void showStatus(const char* msg) {
-    static int16_t y = 20;
-    display.setPartialWindow(0, y - 18, EPD_W, 28);
+    static std::array<std::string, MAX_STATUS_LINES> lines;
+    static size_t lineCount = 0;
+
+    if (lineCount < MAX_STATUS_LINES) {
+        lines[lineCount++] = msg;
+    }
+
+    uint16_t wh = STATUS_FIRST_Y + lineCount * STATUS_LINE_STEP;
+    if (wh > EPD_H) {
+        wh = EPD_H;
+    }
+    display.setPartialWindow(0, 0, EPD_W, wh);
+
     display.firstPage();
     do {
         display.fillScreen(GxEPD_WHITE);
         display.setTextColor(GxEPD_BLACK);
         display.setFont(&FreeSans12pt7b);
         display.setTextSize(1);
-        display.setCursor(EPD_MARGIN, y);
-        display.print(msg);
+        for (size_t i = 0; i < lineCount; i++) {
+            display.setCursor(EPD_MARGIN, STATUS_FIRST_Y + i * STATUS_LINE_STEP);
+            display.print(lines[i].c_str());
+        }
     } while (display.nextPage());
-    y += 28;
+    delay(STATUS_STEP_DELAY_MS);
 }
 
 void updateDisplay(uint16_t co2, float temperature, float humidity, uint8_t batPct) {
@@ -247,11 +264,6 @@ void setup() {
 
     analogSetAttenuation(ADC_11db);  // 0–3.9 V range; covers 1.5–2.1 V from the battery divider
 
-    Wire.begin();
-    scd4x.begin(Wire, SCD41_I2C_ADDR_62);
-    scd4x.stopPeriodicMeasurement();  // clear any leftover state from before power cycle
-    scd4x.startLowPowerPeriodicMeasurement();
-
     SPI.begin(SPI_SCK, /*MISO=*/-1, SPI_MOSI, EPD_CS);
     display.init(115200);
     display.setRotation(1);
@@ -259,6 +271,8 @@ void setup() {
     display.setFullWindow();
     display.firstPage();
     do { display.fillScreen(GxEPD_WHITE); } while (display.nextPage());
+    display.epd2.writeScreenBufferAgain();  // keep SSD1681 current/previous RAM in sync after clear
+    delay(STATUS_STEP_DELAY_MS);
 
     // Show reset reason so we know if it's brownout, crash, or watchdog
     switch (esp_reset_reason()) {
@@ -273,6 +287,13 @@ void setup() {
 
     showStatus("1: display ok");
 
+    // Bring the display up before starting the SCD41 measurement cycle, so
+    // boot diagnostics remain visible even if sensor startup stresses power.
+    Wire.begin();
+    scd4x.begin(Wire, SCD41_I2C_ADDR_62);
+    scd4x.stopPeriodicMeasurement();  // clear any leftover state from before power cycle
+    scd4x.startLowPowerPeriodicMeasurement();
+
     if (BLE_ENABLED) {
         showStatus("2: wifi off...");
         WiFi.mode(WIFI_OFF);
@@ -286,6 +307,7 @@ void setup() {
         bleServer = BLEDevice::createServer();
         bleServer->setCallbacks(new ServerCallbacks());
 
+        showStatus("5: gatt service...");
         BLEService *service = bleServer->createService(SERVICE_UUID.data());
         characteristic = service->createCharacteristic(
             CHARACTERISTIC_UUID.data(),
@@ -297,13 +319,13 @@ void setup() {
         characteristic->addDescriptor(cccd);
         service->start();
 
-        showStatus("5: advertising...");
+        showStatus("6: advertising...");
         BLEDevice::getAdvertising()->addServiceUUID(SERVICE_UUID.data());
         BLEDevice::getAdvertising()->setMinInterval(1600);  // 1s (units of 0.625ms)
         BLEDevice::getAdvertising()->setMaxInterval(2000);  // 1.25s
         BLEDevice::getAdvertising()->start();
 
-        showStatus("6: ready");
+        showStatus("7: ready");
     }
 
     esp_pm_config_t pm = {
@@ -313,6 +335,8 @@ void setup() {
     };
     esp_pm_configure(&pm);
 
+    connectedAt = millis();
+    lastNotify = millis();
     Serial.println("BLE advertising as 'Air Monitor'");
 }
 
