@@ -1,36 +1,42 @@
 #include <array>
-#include <string_view>
 #include <esp_system.h>
+#include <esp_sleep.h>
 
-#include <ArduinoJson.h>
 #include <Wire.h>
 #include <SensirionI2cScd4x.h>
 
 #include <WiFi.h>
-
 #include <BLEDevice.h>
-#include <BLEServer.h>
-#include <BLEUtils.h>
-#include <BLE2902.h>
-#include <esp_pm.h>
+#include <BLEAdvertising.h>
 
 #include <SPI.h>
 #include <GxEPD2_BW.h>
 #include <Fonts/FreeSans12pt7b.h>
 #include <Fonts/FreeSansBold24pt7b.h>
 
-constexpr bool BLE_ENABLED = true;
+// Beacon advertisement — manufacturer-specific data (9 bytes, little-endian):
+//   [0-1]  company ID: 0x41 0x4D ('AM')
+//   [2]    protocol version (BEACON_VERSION); bump when layout changes
+//   [3-4]  CO2 in ppm (uint16)
+//   [5-6]  temperature in 0.01 °C (int16)
+//   [7]    relative humidity in % (uint8)
+//   [8]    battery percent (uint8)
+//
+// Parsing rule: read [2] first; only parse further fields if version is known.
+// New fields must be appended so older parsers can still read [3-8].
+constexpr uint16_t BEACON_COMPANY_ID  = 0x4D41;   // 'AM' (Air Monitor), LE bytes: 0x41 0x4D
+constexpr uint8_t  BEACON_VERSION     = 1;
 
-constexpr std::string_view SERVICE_UUID        = "f59c6ce6-b894-4e87-9c5b-b347b72c7e93";  // randomly generated
-constexpr std::string_view CHARACTERISTIC_UUID = "3d455d99-f31a-4826-bf25-7c5f23cedc49";  // randomly generated
+// Byte offsets within the 7-byte payload that follows the 2-byte company ID
+constexpr size_t BOFF_VERSION = 0;  // uint8
+constexpr size_t BOFF_CO2     = 1;  // uint16 LE, ppm
+constexpr size_t BOFF_TEMP    = 3;  // int16  LE, 0.01 °C
+constexpr size_t BOFF_RH      = 5;  // uint8,  RH%
+constexpr size_t BOFF_BAT     = 6;  // uint8,  %
+constexpr size_t BEACON_PAYLOAD_LEN = 7;  // bytes after company ID
 
-constexpr uint32_t NOTIFY_INTERVAL_MS   = 30000;  // how often to push sensor data to the client
-constexpr uint16_t BLE_CONN_INTERVAL_MIN    = 400;  // units of 1.25ms = 500ms minimum connection interval
-constexpr uint16_t BLE_CONN_INTERVAL_MAX    = 800;  // units of 1.25ms = 1s maximum connection interval
-constexpr uint16_t BLE_SUPERVISION_TIMEOUT  = 500;  // units of 10ms; only fires on unclean drops — clean disconnects are immediate
-constexpr uint32_t SUBSCRIBE_DELAY_MS   = 5000;   // wait after connect before first notify; must cover CCCD write at 1s connection interval
-constexpr size_t   JSON_BUF_SIZE        = 64;     // max bytes for serialized JSON payload
-constexpr uint16_t BLE_MTU              = 512;    // requested ATT MTU; negotiated with client at connect time
+constexpr uint32_t ADV_DURATION_MS    = 5000;
+constexpr uint64_t SLEEP_DURATION_US  = 1ULL * 60 * 1000000;  // 1-minute cycle
 
 // ePaper pins (XIAO ESP32-C3)
 constexpr int EPD_CS   = 5;   // D3
@@ -51,14 +57,6 @@ constexpr int STATUS_FIRST_Y = 20;
 constexpr int STATUS_LINE_STEP = 29;        // FreeSans12pt7b yAdvance
 constexpr uint32_t STATUS_STEP_DELAY_MS = 500;  // required to avoid power spikes
 constexpr size_t MAX_STATUS_LINES = 8;
-
-// SCD41 data-ready polling
-constexpr uint32_t SCD4X_READY_TIMEOUT_MS = 2000;  // max wait per cycle for a fresh measurement
-constexpr uint32_t SCD4X_READY_POLL_MS    = 100;
-
-// Loop timing
-constexpr uint32_t LOOP_TICK_MS         = 100;
-constexpr uint32_t RESTART_ADV_DELAY_MS = 500;
 
 // Battery ADC
 constexpr int BAT_PIN = A0;  // D0/GPIO2; reads through 220k+220k divider (ratio 1:2)
@@ -87,51 +85,9 @@ uint8_t readBatteryPercent() {
 
 SensirionI2cScd4x scd4x;
 
-BLECharacteristic *characteristic;
-BLEServer *bleServer;
-
-volatile bool     deviceConnected    = false;
-volatile bool     restartAdvertising = false;
-
-volatile uint32_t connectedAt        = 0;
-uint32_t lastNotify = 0;
-
 GxEPD2_BW<GxEPD2_154_D67, GxEPD2_154_D67::HEIGHT> display(
     GxEPD2_154_D67(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY)
 );
-
-
-class CharacteristicCallbacks : public BLECharacteristicCallbacks {
-    void onStatus(BLECharacteristic *c, Status s, uint32_t code) {
-        if (s == SUCCESS_NOTIFY) {
-            connectedAt = 0;
-            lastNotify  = millis();
-        } else if (s == ERROR_NO_SUBSCRIBER) {
-            connectedAt = millis();  // retry after SUBSCRIBE_DELAY_MS
-        } else if (s == ERROR_GATT || s == ERROR_NO_CLIENT) {
-            deviceConnected    = false;
-            restartAdvertising = true;
-        }
-    }
-};
-
-class CCCDCallbacks : public BLEDescriptorCallbacks {
-    void onWrite(BLEDescriptor *desc) {
-        uint8_t *val = desc->getValue();
-        if (val && val[0] == 0x01) {  // client enabled notifications
-            connectedAt = millis();
-        }
-    }
-};
-
-class ServerCallbacks : public BLEServerCallbacks {
-    void onConnect(BLEServer *server) {
-        deviceConnected = true;
-        connectedAt     = millis();
-        bleServer->requestConnParams(bleServer->getConnId(), BLE_CONN_INTERVAL_MIN, BLE_CONN_INTERVAL_MAX, 0, BLE_SUPERVISION_TIMEOUT);
-    }
-    void onDisconnect(BLEServer *server) { deviceConnected = false; restartAdvertising = true; }
-};
 
 void showStatus(const char* msg) {
     static std::array<std::string, MAX_STATUS_LINES> lines;
@@ -195,8 +151,6 @@ void updateDisplay(uint16_t co2, float temperature, float humidity, uint8_t batP
         display.print("C");
 
         // Top-right: humidity, right-aligned
-        display.setFont(&FreeSans12pt7b);
-        display.setTextSize(1);
         display.getTextBounds(rhStr, 0, 0, &x1, &y1, &tw, &th);
         display.setCursor(EPD_W - EPD_MARGIN - (int16_t)tw, EPD_TOP_Y);
         display.print(rhStr);
@@ -216,8 +170,6 @@ void updateDisplay(uint16_t co2, float temperature, float humidity, uint8_t batP
         display.print(batStr);
 
         // Bottom-right: unit label
-        display.setFont(&FreeSans12pt7b);
-        display.setTextSize(1);
         display.getTextBounds("CO2 (ppm)", 0, 0, &x1, &y1, &tw, &th);
         display.setCursor(EPD_W - EPD_MARGIN - (int16_t)tw, EPD_BOTTOM_Y);
         display.print("CO2 (ppm)");
@@ -226,147 +178,111 @@ void updateDisplay(uint16_t co2, float temperature, float humidity, uint8_t batP
     display.hibernate();
 }
 
-void sendNotification() {
-    // Statics retain the last good reading so the display never shows zeros
-    // after the first successful measurement.
-    static uint16_t co2 = 0;
-    static float temperature = 0.0f, humidity = 0.0f;
-    uint8_t batPct = readBatteryPercent();
+void advertise(uint16_t co2, float temperature, float humidity, uint8_t batPct) {
+    int16_t tempCdeg = (int16_t)(temperature * 100.0f);
+    uint8_t mfr[2 + BEACON_PAYLOAD_LEN];
+    mfr[0] = BEACON_COMPANY_ID & 0xFF;
+    mfr[1] = BEACON_COMPANY_ID >> 8;
+    mfr[2 + BOFF_VERSION] = BEACON_VERSION;
+    mfr[2 + BOFF_CO2]     = co2 & 0xFF;
+    mfr[2 + BOFF_CO2 + 1] = co2 >> 8;
+    mfr[2 + BOFF_TEMP]    = (uint8_t)(tempCdeg & 0xFF);
+    mfr[2 + BOFF_TEMP + 1]= (uint8_t)(tempCdeg >> 8);
+    mfr[2 + BOFF_RH]      = (uint8_t)(humidity);
+    mfr[2 + BOFF_BAT]     = batPct;
 
-    // The SCD41 runs on its own autonomous 30s clock, independent of our
-    // notify interval. Poll briefly so a small phase offset doesn't cause
-    // us to arrive just before data is ready.
-    bool dataReady = false;
-    uint32_t start = millis();
-    while (!dataReady && millis() - start < SCD4X_READY_TIMEOUT_MS) {
-        scd4x.getDataReadyStatus(dataReady);
-        if (!dataReady) delay(SCD4X_READY_POLL_MS);
-    }
-    if (dataReady) {
-        scd4x.readMeasurement(co2, temperature, humidity);
-    }
-    Serial.printf("scd4x: co2=%d temp=%.1f rh=%.1f%s\n", co2, temperature, humidity,
-                  dataReady ? "" : " [cached]");
+    WiFi.mode(WIFI_OFF);
+    delay(200);
+    BLEDevice::init("Air Monitor");
+    BLEAdvertising *adv = BLEDevice::getAdvertising();
+    BLEAdvertisementData advData;
+    // Build manufacturer-specific AD structure manually to handle binary data safely:
+    // [length][0xFF = mfr type][company_id lo][company_id hi][payload...]
+    uint8_t ad[2 + sizeof(mfr)];
+    ad[0] = 1 + sizeof(mfr);
+    ad[1] = 0xFF;
+    memcpy(ad + 2, mfr, sizeof(mfr));
+    advData.addData((char*)ad, sizeof(ad));
+    adv->setAdvertisementData(advData);
+    adv->setMinInterval(160);  // 100ms (units of 0.625ms)
+    adv->setMaxInterval(160);
+    adv->start();
 
-    JsonDocument doc;
-    doc["co2"]  = co2;
-    doc["temp"] = round(temperature * 10) / 10.0f;
-    doc["rh"]   = round(humidity * 10) / 10.0f;
-    doc["bat"]  = batPct;
+    delay(ADV_DURATION_MS);
 
-    static std::array<char, JSON_BUF_SIZE> buf;
-    serializeJson(doc, buf.data(), buf.size());
-
-    if (BLE_ENABLED) {
-        characteristic->setValue((uint8_t *)buf.data(), strlen(buf.data()));
-        characteristic->notify();
-    }
-    Serial.println(buf.data());
-
-    updateDisplay(co2, temperature, humidity, batPct);
+    adv->stop();
+    BLEDevice::deinit(true);
 }
 
 void setup() {
+    setCpuFrequencyMhz(80);
     Serial.begin(115200);
-
     analogSetAttenuation(ADC_11db);  // 0–3.9 V range; covers 1.5–2.1 V from the battery divider
 
     SPI.begin(SPI_SCK, /*MISO=*/-1, SPI_MOSI, EPD_CS);
     display.init(115200);
     display.setRotation(1);
 
-    display.setFullWindow();
-    display.firstPage();
-    do { display.fillScreen(GxEPD_WHITE); } while (display.nextPage());
-    display.epd2.writeScreenBufferAgain();  // keep SSD1681 current/previous RAM in sync after clear
-    delay(STATUS_STEP_DELAY_MS);
-    display.hibernate();
-
-    // Show reset reason so we know if it's brownout, crash, or watchdog
-    switch (esp_reset_reason()) {
-        case ESP_RST_BROWNOUT: showStatus("RST: brownout");   break;
-        case ESP_RST_PANIC:    showStatus("RST: panic");      break;
-        case ESP_RST_TASK_WDT: showStatus("RST: task wdt");   break;
-        case ESP_RST_INT_WDT:  showStatus("RST: int wdt");    break;
-        case ESP_RST_WDT:      showStatus("RST: rtc wdt");    break;
-        case ESP_RST_SW:       showStatus("RST: software");   break;
-        default:               showStatus("RST: poweron/pin"); break;
-    }
-
-    showStatus("1: display ok");
-
-    // Bring the display up before starting the SCD41 measurement cycle, so
-    // boot diagnostics remain visible even if sensor startup stresses power.
     Wire.begin();
     scd4x.begin(Wire, SCD41_I2C_ADDR_62);
-    scd4x.stopPeriodicMeasurement();  // clear any leftover state from before power cycle
-    scd4x.startLowPowerPeriodicMeasurement();
 
-    if (BLE_ENABLED) {
-        showStatus("2: wifi off...");
-        WiFi.mode(WIFI_OFF);
-        delay(200);
+    bool firstBoot = (esp_reset_reason() != ESP_RST_DEEPSLEEP);
 
-        showStatus("3: ble init...");
-        BLEDevice::setMTU(BLE_MTU);
-        BLEDevice::init("Air Monitor");
+    if (firstBoot) {
+        display.setFullWindow();
+        display.firstPage();
+        do { display.fillScreen(GxEPD_WHITE); } while (display.nextPage());
 
-        showStatus("4: ble server...");
-        bleServer = BLEDevice::createServer();
-        bleServer->setCallbacks(new ServerCallbacks());
-
-        showStatus("5: gatt service...");
-        BLEService *service = bleServer->createService(SERVICE_UUID.data());
-        characteristic = service->createCharacteristic(
-            CHARACTERISTIC_UUID.data(),
-            BLECharacteristic::PROPERTY_NOTIFY
-        );
-        characteristic->setCallbacks(new CharacteristicCallbacks());
-        BLE2902 *cccd = new BLE2902();
-        cccd->setCallbacks(new CCCDCallbacks());
-        characteristic->addDescriptor(cccd);
-        service->start();
-
-        showStatus("6: advertising...");
-        BLEDevice::getAdvertising()->addServiceUUID(SERVICE_UUID.data());
-        BLEDevice::getAdvertising()->setMinInterval(1600);  // 1s (units of 0.625ms)
-        BLEDevice::getAdvertising()->setMaxInterval(2000);  // 1.25s
-        BLEDevice::getAdvertising()->start();
-
-        showStatus("7: ready");
-    }
-
-    esp_pm_config_t pm = {
-        .max_freq_mhz       = 80,   // reduce from 240MHz — plenty for BLE
-        .min_freq_mhz       = 40,
-        .light_sleep_enable = true
-    };
-    esp_pm_configure(&pm);
-
-    connectedAt = millis();
-    lastNotify = millis();
-    Serial.println("BLE advertising as 'Air Monitor'");
-}
-
-void loop() {
-    if (BLE_ENABLED && restartAdvertising) {
-        restartAdvertising = false;
-        delay(RESTART_ADV_DELAY_MS);
-        BLEDevice::getAdvertising()->start();
-    }
-
-    delay(LOOP_TICK_MS);
-
-    uint32_t now = millis();
-    if (BLE_ENABLED && deviceConnected) {
-        if (connectedAt > 0 && now - connectedAt >= SUBSCRIBE_DELAY_MS) {
-            sendNotification();
-        } else if (connectedAt == 0 && now - lastNotify >= NOTIFY_INTERVAL_MS) {
-            lastNotify = now;
-            sendNotification();
+        // Full-window render for RST reason so it's visible regardless of partial update state
+        const char* rstMsg = "RST: poweron/pin";
+        switch (esp_reset_reason()) {
+            case ESP_RST_BROWNOUT: rstMsg = "RST: brownout";    break;
+            case ESP_RST_PANIC:    rstMsg = "RST: panic";       break;
+            case ESP_RST_TASK_WDT: rstMsg = "RST: task wdt";   break;
+            case ESP_RST_INT_WDT:  rstMsg = "RST: int wdt";    break;
+            case ESP_RST_WDT:      rstMsg = "RST: rtc wdt";    break;
+            case ESP_RST_SW:       rstMsg = "RST: software";   break;
+            default:                                             break;
         }
-    } else if (now - lastNotify >= NOTIFY_INTERVAL_MS) {
-        lastNotify = now;
-        sendNotification();
+        display.setFullWindow();
+        display.firstPage();
+        do {
+            display.fillScreen(GxEPD_WHITE);
+            display.setTextColor(GxEPD_BLACK);
+            display.setFont(&FreeSans12pt7b);
+            display.setTextSize(1);
+            display.setCursor(EPD_MARGIN, EPD_TOP_Y);
+            display.print(rstMsg);
+        } while (display.nextPage());
+
+        showStatus("Display OK");
+        showStatus("Sensor init...");
+        scd4x.stopPeriodicMeasurement();
+        delay(500);
+        showStatus("Measuring...");
+    } else {
+        scd4x.wakeUp();
+        delay(30);  // SCD41 requires 30ms after wakeUp before issuing commands
     }
+
+    scd4x.measureSingleShot();
+    delay(5000);
+
+    uint16_t co2 = 0;
+    float temperature = 0.0f, humidity = 0.0f;
+    scd4x.readMeasurement(co2, temperature, humidity);
+    scd4x.powerDown();
+
+    uint8_t batPct = readBatteryPercent();
+
+    Serial.printf("co2=%d temp=%.1f rh=%.1f bat=%d%%\n", co2, temperature, humidity, batPct);
+
+    updateDisplay(co2, temperature, humidity, batPct);
+    advertise(co2, temperature, humidity, batPct);
+    Wire.end();
+    SPI.end();
+    pinMode(SPI_MOSI, INPUT);  // GPIO10 = XIAO user LED (active low); float to reduce sleep current
+    esp_deep_sleep(SLEEP_DURATION_US);
 }
+
+void loop() {}

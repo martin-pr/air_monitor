@@ -49,7 +49,7 @@ cmake -B build -DPORT=/dev/ttyACM1
 cmake -B build -DFQBN=esp32:esp32:XIAO_ESP32S3
 ```
 
-The default FQBN is `esp32:esp32:XIAO_ESP32C3`. The XIAO ESP32-C3 has no user-controllable LED; the firmware contains no LED code.
+The default FQBN is `esp32:esp32:XIAO_ESP32C3`.
 
 ## Serial Monitor
 
@@ -61,7 +61,7 @@ Press Enter once after connecting — the USB-Serial-JTAG peripheral requires th
 
 ## Android Widget
 
-The `app` directory contains an Android home-screen widget built with CMake and Android SDK command-line tools. It connects to the device over BLE and displays live sensor readings.
+The `app` directory contains an Android home-screen widget. It passively scans for BLE advertisements from the device and displays the latest sensor readings — no connection or pairing required.
 
 Build the debug APK:
 
@@ -77,26 +77,25 @@ Install it on a connected Android device:
 adb install -r build/AirMonitorWidget-debug.apk
 ```
 
-After installing, add the **Air Monitor** widget from the Android launcher widget picker. If an older instance is already on the home screen, remove and re-add it so the launcher reloads the widget metadata.
-
-The app runs a foreground service (`connectedDevice` type) that scans for the device and maintains a GATT connection. The scan restarts every 3 minutes if not connected, which prevents it getting stuck after external tools (e.g. nRF Connect) temporarily take the connection.
+After installing, add the **Air Monitor** widget from the Android launcher widget picker.
 
 ## BLE
 
-The device advertises as **Air Monitor** and exposes a single GATT service:
+The device uses a **connectionless beacon** — no GATT, no pairing. It wakes from deep sleep every 5 minutes, takes a measurement, updates the ePaper display, then advertises for 5 seconds before going back to sleep.
 
-| | UUID |
-|---|---|
-| Service | `f59c6ce6-b894-4e87-9c5b-b347b72c7e93` |
-| Characteristic | `3d455d99-f31a-4826-bf25-7c5f23cedc49` |
+The advertisement contains manufacturer-specific data with company ID `0x4D41` (`AM`, little-endian bytes `0x41 0x4D`), followed by a versioned binary payload:
 
-The characteristic uses NOTIFY. The device pushes a JSON payload every 30 seconds:
+| Byte offset (after company ID) | Field | Type | Notes |
+|---|---|---|---|
+| 0 | Protocol version | uint8 | Currently `1`; check before parsing further fields |
+| 1–2 | CO2 | uint16 LE | ppm |
+| 3–4 | Temperature | int16 LE | 0.01 °C (e.g. 2350 = 23.50 °C) |
+| 5 | Relative humidity | uint8 | % RH (integer) |
+| 6 | Battery | uint8 | % |
 
-```json
-{"co2": 1234, "temp": 23.5, "rh": 45.1, "bat": 85}
-```
+**Parsing rule:** read byte 0 first; only parse further fields if the version is known. New fields will be appended after byte 6, so older parsers can still read the existing fields safely.
 
-Connection parameters are negotiated to a 500ms–1s interval to reduce radio duty cycle. The first notification is sent ~5 seconds after the client subscribes (to allow time for the CCCD write at the negotiated interval).
+The device advertises as **Air Monitor** (MAC `ac:27:6e:7e:c7:f4`). Scanners can filter by local name or company ID.
 
 ## Wiring
 
@@ -157,60 +156,42 @@ The middle segment (20–80%) approximates the flat part of the LiPo discharge c
 
 ## Power
 
-### Components
+### Architecture
+
+The firmware uses a **deep sleep beacon** cycle:
+
+1. Wake from deep sleep
+2. Take SCD41 single-shot measurement (~5 s)
+3. Update ePaper display
+4. Advertise BLE beacon for 5 s
+5. Deep sleep for ~5 minutes
+
+Total active time: ~11 s per 300 s cycle.
+
+### Component current
 
 | Component | Mode | Current |
 |---|---|---|
-| ESP32-C3 | BLE connected, light sleep | ~0.6–1.2 mA |
-| ESP32-C3 | BLE advertising, light sleep | ~2–2.5 mA |
-| SCD41 | Periodic (5s, continuous) | 15–18 mA @ 3.3 V (datasheet) |
-| SCD41 | Low-power periodic (30s, autonomous) | 3.2–3.5 mA @ 3.3 V (datasheet) |
-| SCD41 | Single-shot (5 min interval average) | 0.45–0.5 mA @ 3.3 V (datasheet) |
+| ESP32-C3 | Deep sleep | ~5 µA |
+| ESP32-C3 | Active, 80 MHz, no radio | ~20 mA |
+| ESP32-C3 | BLE advertising burst | ~30 mA peak |
+| SCD41 | Single-shot (5 min interval average) | ~0.5 mA |
+| SCD41 | Power-down | <0.001 mA |
+| ePaper | Update (active) | ~20 mA |
+| ePaper | Hibernate | <0.01 mA |
 
-### Battery estimates (400 mAh cell)
+### Battery estimate (400 mAh cell)
 
-| Scenario | Total current | Estimated life |
-|---|---|---|
-| Connected + SCD41 low-power periodic (30s) | ~4–5 mA | ~3–4 days |
-| Connected, no sensor | ~0.6–1.2 mA | ~14–28 days |
-| Advertising only, no sensor | ~2–2.5 mA | ~7–8 days |
+Active ~11 s per 300 s cycle, deep sleep otherwise. Averaged over a full cycle:
 
-### SCD41 measurement modes
+- ESP32-C3 active: ~25 mA × (11/300) ≈ 0.9 mA
+- SCD41 single-shot: ~0.5 mA average (per datasheet at 5 min interval)
+- Deep sleep (everything): ~5 µA × (289/300) ≈ negligible
 
-**Low-power periodic** (`start_low_power_periodic_measurement`): the sensor manages its own 30s duty cycle autonomously — active for ~5s, idle for ~25s, repeating. The ESP32 just reads the result over I2C before each BLE notification. Simple to integrate; 3.2–3.5 mA average per datasheet.
+**Total ≈ 1.4 mA average → ~12 days on 400 mAh** (excluding deep sleep current anomalies under investigation).
 
-**Single-shot** (`measure_single_shot`): sensor stays idle until the ESP32 triggers a measurement, waits ~5s for the result, then returns to idle. The ESP32 controls the interval. At a 5-minute interval the datasheet-measured average is 0.45–0.5 mA. Trade-off: BLE clients receive cached readings between measurements rather than fresh ones.
+### SCD41 single-shot and ASC
 
-Automatic Self-Calibration (ASC) works with single-shot via the software `power_down` / `wake_up` commands, which preserve calibration state in the sensor's SRAM. Hard VDD power-cycling breaks ASC because SRAM is lost. The datasheet optimises ASC for a 5-minute measurement interval and requires the sensor to see outdoor-level CO2 (~400 ppm) at least once per week; the first reading after any power cycle should be discarded.
+The firmware uses `measure_single_shot` (not periodic mode). The sensor stays idle until triggered, takes ~5 s for a reading, then enters power-down. The ESP32 controls the interval.
 
-### Extending battery life
-
-The current firmware maintains a persistent BLE connection, which prevents the ESP32 radio from sleeping deeply. Two architectural approaches can significantly improve battery life:
-
-**Deep sleep between measurements**
-
-ESP32 deep sleeps at ~20 µA between cycles. On each wake:
-1. Trigger SCD41 single-shot measurement (~5s)
-2. Advertise, accept one connection, send notification, disconnect (~3–5s)
-3. Return to deep sleep for ~5 minutes
-
-Active ~10s out of every 300s: ESP32 at ~20 mA × (10/300) ≈ 0.7 mA average + SCD41 single-shot 0.5 mA average = **~1.2 mA total → ~14 days on 400 mAh**.
-
-Trade-off: no persistent connection. The Android client must scan and connect on demand rather than maintaining a subscription. A short advertising window on each wake (e.g. 10s) gives the app time to connect.
-
-**BLE advertisement beacon (no connection)**
-
-Encode sensor readings directly in the BLE advertisement packet (manufacturer-specific data). The client passively scans — no connection, no pairing, no GATT overhead.
-
-- Advertising burst: ~50ms every 5 minutes, then deep sleep
-- Average current: ~0.1 mA → **months on 400 mAh**
-
-Trade-off: payload limited to ~20 bytes (sufficient for CO2 + temp + RH as integers); iOS has restrictions on reading manufacturer data from unconnected peripherals; Android app must use a BLE scanner rather than a GATT client.
-
-**Comparison**
-
-| Approach | Avg current | 400 mAh |
-|---|---|---|
-| Current (always-connected + SCD41 low-power periodic) | ~4–5 mA | ~3–4 days |
-| Deep sleep + connect-on-wake (5 min interval) | ~1.2 mA | ~14 days |
-| BLE advertisement beacon (5 min interval) | ~0.1 mA | months |
+Automatic Self-Calibration (ASC) works with single-shot via the `power_down` / `wake_up` command pair, which preserves calibration state in SRAM. Hard VDD power-cycling breaks ASC because SRAM is lost. The datasheet optimises ASC for a 5-minute interval and requires outdoor-level CO2 (~400 ppm) exposure at least once per week.

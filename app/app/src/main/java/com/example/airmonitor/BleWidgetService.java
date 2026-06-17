@@ -8,17 +8,11 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.appwidget.AppWidgetManager;
 import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothDevice;
-import android.bluetooth.BluetoothGatt;
-import android.bluetooth.BluetoothGattCallback;
-import android.bluetooth.BluetoothGattCharacteristic;
-import android.bluetooth.BluetoothGattDescriptor;
-import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothManager;
-import android.bluetooth.BluetoothProfile;
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter;
+import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
 import android.content.ComponentName;
@@ -29,26 +23,22 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
-import android.os.ParcelUuid;
 import android.view.View;
 import android.widget.RemoteViews;
 
 import org.json.JSONObject;
 
 import java.text.DateFormat;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
-import java.util.UUID;
 
 public class BleWidgetService extends Service {
-    private static final UUID SERVICE_UUID = UUID.fromString("f59c6ce6-b894-4e87-9c5b-b347b72c7e93");
-    private static final UUID CHARACTERISTIC_UUID = UUID.fromString("3d455d99-f31a-4826-bf25-7c5f23cedc49");
-    private static final UUID CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
+    private static final int BEACON_COMPANY_ID = 0x4D41;
+    private static final int BEACON_VERSION = 1;
+    private static final int BEACON_PAYLOAD_LEN = 7;
     private static final String CHANNEL_ID = "air_monitor_ble";
-    private static final int BLE_MTU = 512;
     private static JSONObject lastJson;
     private static String lastStatus;
     private static String lastUpdateTime;
@@ -57,16 +47,13 @@ public class BleWidgetService extends Service {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private BluetoothLeScanner scanner;
-    private BluetoothGatt gatt;
     private boolean scanning;
 
     private final Runnable scanRestart = new Runnable() {
         @Override
         public void run() {
-            if (gatt == null) {
-                stopScan();
-                startScan();
-            }
+            stopScan();
+            startScan();
         }
     };
 
@@ -91,7 +78,6 @@ public class BleWidgetService extends Service {
     @Override
     public void onDestroy() {
         stopScan();
-        closeGatt();
         super.onDestroy();
     }
 
@@ -100,7 +86,7 @@ public class BleWidgetService extends Service {
             setStatus(getString(R.string.permission_needed));
             return;
         }
-        if (gatt != null || scanning) {
+        if (scanning) {
             return;
         }
 
@@ -114,9 +100,17 @@ public class BleWidgetService extends Service {
 
         setStatus(getString(R.string.scanning));
         List<ScanFilter> filters = new ArrayList<>();
-        filters.add(new ScanFilter.Builder().setServiceUuid(new ParcelUuid(SERVICE_UUID)).build());
+        filters.add(new ScanFilter.Builder()
+            .setManufacturerData(
+                BEACON_COMPANY_ID,
+                new byte[] { BEACON_VERSION },
+                new byte[] { (byte)0xFF }
+            )
+            .build());
         ScanSettings settings = new ScanSettings.Builder()
-            .setScanMode(ScanSettings.SCAN_MODE_LOW_POWER)
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
+            .setNumOfMatches(ScanSettings.MATCH_NUM_MAX_ADVERTISEMENT)
             .build();
         scanner.startScan(filters, settings, scanCallback);
         scanning = true;
@@ -135,113 +129,51 @@ public class BleWidgetService extends Service {
     private final ScanCallback scanCallback = new ScanCallback() {
         @Override
         public void onScanResult(int callbackType, ScanResult result) {
-            stopScan();
-            connect(result.getDevice());
+            handleBeacon(result);
+        }
+
+        @Override
+        public void onScanFailed(int errorCode) {
+            setStatus(getString(R.string.not_connected));
         }
     };
 
-    private void connect(BluetoothDevice device) {
-        if (!hasBlePermissions()) {
+    private void handleBeacon(ScanResult result) {
+        ScanRecord record = result.getScanRecord();
+        byte[] payload = record == null ? null : record.getManufacturerSpecificData(BEACON_COMPANY_ID);
+        if (payload == null || payload.length < BEACON_PAYLOAD_LEN) {
             return;
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            gatt = device.connectGatt(this, false, gattCallback, BluetoothDevice.TRANSPORT_LE);
-        } else {
-            gatt = device.connectGatt(this, false, gattCallback);
+
+        if ((payload[0] & 0xFF) != BEACON_VERSION) {
+            setStatus("unsupported beacon");
+            return;
+        }
+
+        try {
+            int co2 = u16le(payload, 1);
+            int tempCenti = s16le(payload, 3);
+            int humidity = payload[5] & 0xFF;
+            int battery = payload[6] & 0xFF;
+
+            JSONObject json = new JSONObject();
+            json.put("co2", co2);
+            json.put("temp", tempCenti / 100.0);
+            json.put("humidity", humidity);
+            json.put("battery", battery);
+            setData(json, "");
+        } catch (Exception error) {
+            setStatus(getString(R.string.not_connected));
         }
     }
 
-    private final BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
-        @Override
-        public void onConnectionStateChange(BluetoothGatt g, int status, int newState) {
-            if (newState == BluetoothProfile.STATE_CONNECTED && hasBlePermissions()) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    g.requestMtu(BLE_MTU);
-                } else {
-                    g.discoverServices();
-                }
-            } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                closeGatt();
-                setStatus(getString(R.string.not_connected));
-                handler.postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        startScan();
-                    }
-                }, 3000);
-            }
-        }
+    private static int u16le(byte[] data, int offset) {
+        return (data[offset] & 0xFF) | ((data[offset + 1] & 0xFF) << 8);
+    }
 
-        @Override
-        public void onMtuChanged(BluetoothGatt g, int mtu, int status) {
-            if (hasBlePermissions()) {
-                g.discoverServices();
-            }
-        }
-
-        @Override
-        public void onServicesDiscovered(BluetoothGatt g, int status) {
-            BluetoothGattService service = g.getService(SERVICE_UUID);
-            BluetoothGattCharacteristic characteristic =
-                service == null ? null : service.getCharacteristic(CHARACTERISTIC_UUID);
-            if (characteristic == null || !hasBlePermissions()) {
-                setStatus(getString(R.string.not_connected));
-                return;
-            }
-
-            g.setCharacteristicNotification(characteristic, true);
-            BluetoothGattDescriptor descriptor = characteristic.getDescriptor(CCCD_UUID);
-            if (descriptor == null) {
-                setStatus(getString(R.string.not_connected));
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                int result = g.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
-                if (result != BluetoothGatt.GATT_SUCCESS) {
-                    setStatus(getString(R.string.not_connected));
-                }
-            } else {
-                descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
-                if (!g.writeDescriptor(descriptor)) {
-                    setStatus(getString(R.string.not_connected));
-                }
-            }
-        }
-
-        @Override
-        public void onDescriptorWrite(BluetoothGatt g, BluetoothGattDescriptor descriptor, int status) {
-            if (!CCCD_UUID.equals(descriptor.getUuid()) || status != BluetoothGatt.GATT_SUCCESS) {
-                setStatus(getString(R.string.not_connected));
-            }
-        }
-
-        @Override
-        public void onCharacteristicChanged(BluetoothGatt g, BluetoothGattCharacteristic characteristic) {
-            handleBytes(characteristic.getValue());
-        }
-
-        @Override
-        public void onCharacteristicChanged(
-            BluetoothGatt g,
-            BluetoothGattCharacteristic characteristic,
-            byte[] value
-        ) {
-            handleBytes(value);
-        }
-    };
-
-    private void handleBytes(byte[] bytes) {
-        String text = new String(bytes, StandardCharsets.UTF_8);
-        int nul = text.indexOf('\0');
-        if (nul >= 0) {
-            text = text.substring(0, nul);
-        }
-        text = text.trim();
-
-        try {
-            JSONObject json = new JSONObject(text);
-            setData(json, "");
-        } catch (Exception error) {
-            setStatus("invalid JSON");
-        }
+    private static int s16le(byte[] data, int offset) {
+        int value = u16le(data, offset);
+        return value >= 0x8000 ? value - 0x10000 : value;
     }
 
     private void setStatus(String status) {
@@ -267,13 +199,6 @@ public class BleWidgetService extends Service {
             summary.append(key).append(": ").append(String.valueOf(json.opt(key)));
         }
         return summary.toString();
-    }
-
-    private void closeGatt() {
-        if (gatt != null && hasBlePermissions()) {
-            gatt.close();
-        }
-        gatt = null;
     }
 
     private boolean hasBlePermissions() {
