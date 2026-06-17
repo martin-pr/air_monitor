@@ -141,6 +141,9 @@ void showStatus(const char* msg) {
         lines[lineCount++] = msg;
     }
 
+    display.init(115200, false);
+    display.setRotation(1);
+
     uint16_t wh = STATUS_FIRST_Y + lineCount * STATUS_LINE_STEP;
     if (wh > EPD_H) {
         wh = EPD_H;
@@ -159,6 +162,7 @@ void showStatus(const char* msg) {
         }
     } while (display.nextPage());
     delay(STATUS_STEP_DELAY_MS);
+    display.hibernate();
 }
 
 void updateDisplay(uint16_t co2, float temperature, float humidity, uint8_t batPct) {
@@ -171,6 +175,8 @@ void updateDisplay(uint16_t co2, float temperature, float humidity, uint8_t batP
     int16_t x1, y1;
     uint16_t tw, th;
 
+    display.init(115200, false);
+    display.setRotation(1);
     display.setFullWindow();
     display.firstPage();
     do {
@@ -217,6 +223,7 @@ void updateDisplay(uint16_t co2, float temperature, float humidity, uint8_t batP
         display.print("CO2 (ppm)");
 
     } while (display.nextPage());
+    display.hibernate();
 }
 
 void sendNotification() {
@@ -273,6 +280,7 @@ void setup() {
     do { display.fillScreen(GxEPD_WHITE); } while (display.nextPage());
     display.epd2.writeScreenBufferAgain();  // keep SSD1681 current/previous RAM in sync after clear
     delay(STATUS_STEP_DELAY_MS);
+    display.hibernate();
 
     // Show reset reason so we know if it's brownout, crash, or watchdog
     switch (esp_reset_reason()) {
