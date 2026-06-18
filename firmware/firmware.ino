@@ -36,6 +36,7 @@ constexpr size_t BOFF_BAT     = 6;  // uint8,  %
 constexpr size_t BEACON_PAYLOAD_LEN = 7;  // bytes after company ID
 
 constexpr uint32_t ADV_DURATION_MS    = 5000;
+constexpr uint32_t SCD41_MEASURE_MS   = 5000;   // single-shot measurement time per datasheet
 constexpr uint64_t SLEEP_DURATION_US  = 1ULL * 60 * 1000000;  // 1-minute cycle
 
 // ePaper pins (XIAO ESP32-C3)
@@ -257,7 +258,8 @@ void setup() {
     }
 
     scd4x.measureSingleShot();
-    delay(5000);
+    esp_sleep_enable_timer_wakeup(SCD41_MEASURE_MS * 1000ULL);
+    esp_light_sleep_start();
 
     uint16_t co2 = 0;
     float temperature = 0.0f, humidity = 0.0f;
