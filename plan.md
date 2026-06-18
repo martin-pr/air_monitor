@@ -120,14 +120,13 @@ With sleep dominant at longer cycles, the math changes dramatically. Per-cycle e
 
 ### Display sleep-current fix options
 
-1. **Software — drive all display pins (CS, DC, RST, SCK, MOSI) LOW before deep sleep.** Currently only MOSI is floated. If leakage is through SSD1681 input pins, this may reduce draw. Cheap to try, may not be enough.
-2. **Hardware — high-side P-channel MOSFET load switch on the display VCC.** Gate driven by a GPIO; drive high to cut power before sleep, low to enable on wake. ~3 components (MOSFET + pull-up + GPIO). Fully power-gates the module → 0 µA from display in sleep. The cleanest fix.
+1. ~~**Software — float all display pins (CS, DC, RST, SCK, MOSI) before deep sleep.**~~ Tried and measured: 1.29 mA → 1.30 mA. No effect. Leakage is not through SSD1681 input pins; it's the module's own circuitry that stays powered as long as VCC is connected. Software cannot fix this.
+2. **Hardware — high-side P-channel MOSFET load switch on the display VCC.** Gate driven by a GPIO; drive high to cut power before sleep, low to enable on wake. ~3 components (MOSFET + pull-up + GPIO). Fully power-gates the module → 0 µA from display in sleep. The only viable fix.
 3. **Replace the e-paper module** with one that has lower quiescent draw. Less practical.
 
 ## Next steps
 
-1. Try the software pin-driving approach as a quick test for display sleep current.
-2. If software fix is insufficient, design the MOSFET load switch on the next PCB revision.
-3. Pick A / B / C for Android reception.
-4. Implement chosen Android approach.
-5. Once display sleep current is fixed, tune `SLEEP_DURATION_US` to the cycle length that meets the budget.
+1. Design the MOSFET load switch on the next PCB revision (display VCC power-gated by a GPIO).
+2. Pick A / B / C for Android reception.
+3. Implement chosen Android approach.
+4. Once display sleep current is fixed, tune `SLEEP_DURATION_US` to the cycle length that meets the budget.
