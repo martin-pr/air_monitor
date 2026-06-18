@@ -232,8 +232,9 @@ void setup() {
         display.setFullWindow();
         display.firstPage();
         do { display.fillScreen(GxEPD_WHITE); } while (display.nextPage());
+        display.epd2.writeScreenBufferAgain();  // sync SSD1681 current/previous RAM after clear
+        display.hibernate();
 
-        // Full-window render for RST reason so it's visible regardless of partial update state
         const char* rstMsg = "RST: poweron/pin";
         switch (esp_reset_reason()) {
             case ESP_RST_BROWNOUT: rstMsg = "RST: brownout";    break;
@@ -244,17 +245,7 @@ void setup() {
             case ESP_RST_SW:       rstMsg = "RST: software";   break;
             default:                                             break;
         }
-        display.setFullWindow();
-        display.firstPage();
-        do {
-            display.fillScreen(GxEPD_WHITE);
-            display.setTextColor(GxEPD_BLACK);
-            display.setFont(&FreeSans12pt7b);
-            display.setTextSize(1);
-            display.setCursor(EPD_MARGIN, EPD_TOP_Y);
-            display.print(rstMsg);
-        } while (display.nextPage());
-
+        showStatus(rstMsg);
         showStatus("Display OK");
         showStatus("Sensor init...");
         scd4x.stopPeriodicMeasurement();
