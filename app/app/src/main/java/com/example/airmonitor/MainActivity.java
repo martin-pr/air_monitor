@@ -2,7 +2,6 @@ package com.example.airmonitor;
 
 import android.Manifest;
 import android.app.Activity;
-import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -26,23 +25,14 @@ public class MainActivity extends Activity {
         if (missing.length > 0) {
             requestPermissions(missing, PERMISSION_REQUEST);
         } else {
-            startBleService();
+            BeaconScanReceiver.register(this);
         }
     }
 
     @Override
     public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(request, permissions, results);
-        startBleService();
-    }
-
-    private void startBleService() {
-        Intent intent = new Intent(this, BleWidgetService.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent);
-        } else {
-            startService(intent);
-        }
+        BeaconScanReceiver.register(this);
     }
 
     private String[] missingPermissions() {
@@ -52,9 +42,6 @@ public class MainActivity extends Activity {
             addMissing(permissions, Manifest.permission.BLUETOOTH_CONNECT);
         } else {
             addMissing(permissions, Manifest.permission.ACCESS_FINE_LOCATION);
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            addMissing(permissions, Manifest.permission.POST_NOTIFICATIONS);
         }
         return permissions.toArray(new String[0]);
     }
