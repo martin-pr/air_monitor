@@ -2,9 +2,13 @@ package com.example.airmonitor;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.PowerManager;
+import android.provider.Settings;
 import android.widget.TextView;
 
 import java.util.ArrayList;
@@ -25,14 +29,36 @@ public class MainActivity extends Activity {
         if (missing.length > 0) {
             requestPermissions(missing, PERMISSION_REQUEST);
         } else {
-            BeaconScanReceiver.register(this);
+            onPermissionsReady();
         }
     }
 
     @Override
     public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(request, permissions, results);
+        onPermissionsReady();
+    }
+
+    private void onPermissionsReady() {
         BeaconScanReceiver.register(this);
+        requestBatteryOptimizationExemption();
+    }
+
+    // Without this exemption, OEM battery managers (Samsung One UI in particular)
+    // suspend the PendingIntent scan when the screen is off, defeating the whole
+    // point of using PendingIntent-based scanning.
+    private void requestBatteryOptimizationExemption() {
+        PowerManager pm = (PowerManager)getSystemService(POWER_SERVICE);
+        if (pm == null || pm.isIgnoringBatteryOptimizations(getPackageName())) {
+            return;
+        }
+        Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+        intent.setData(Uri.parse("package:" + getPackageName()));
+        try {
+            startActivity(intent);
+        } catch (RuntimeException ignored) {
+            // some OEMs don't expose the dialog — user has to find it in Settings manually
+        }
     }
 
     private String[] missingPermissions() {
