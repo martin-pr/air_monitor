@@ -126,12 +126,40 @@ With sleep dominant at longer cycles, the math changes dramatically. Per-cycle e
 
 All three software paths confirmed dead. The module's quiescent draw is from its own onboard circuitry (boost converter / glue), independent of any SSD1681 pin or state. **Hardware power-gating is the only remaining option.**
 
-4. **Hardware — high-side P-channel MOSFET load switch on the display VCC.** Gate driven by a GPIO; drive high to cut power before sleep, low to enable on wake. ~3 components (MOSFET + pull-up + GPIO). Fully power-gates the module → 0 µA from display in sleep. The only viable fix.
-5. **Replace the e-paper module** with one that has lower quiescent draw. Less practical.
+4. **Hardware — high-side P-channel MOSFET load switch on the display VCC.** Gate driven by a GPIO; drive high to cut power before sleep, low to enable on wake. ~3 components (MOSFET + pull-up + GPIO). Fully power-gates the module → 0 µA from display in sleep. The only viable fix for the display variant.
+
+5. **Build a no-display variant.** If the display isn't a hard requirement, omitting it sidesteps the problem entirely — no board revision needed. See below.
+
+### Alternative: no-display variant meets the goal as-is
+
+Removing the e-paper module entirely (or fitting a hardware variant without it) gives a 232 µA sleep floor with no further engineering. The active phase also drops by ~30–50 mAs/cycle (no display init / full-window refresh / hibernate).
+
+Estimated active phase: ~340–360 mAs/cycle (vs ~380 mAs with display).
+
+| Cycle | Avg current | Battery life |
+|---|---|---|
+| 1 min | ~6.0 mA | ~3 days |
+| 5 min | ~1.40 mA | ~13.4 days |
+| **6 min** | **~1.20 mA** | **~15.6 days ✓** |
+| 10 min | ~0.81 mA | ~23 days |
+| 15 min | ~0.60 mA | ~31 days |
+
+A 6-minute cycle on the no-display variant hits 2 weeks with margin; 10-minute gives 3 weeks. Since there's no visual refresh, longer cycles are free — the phone gets readings from the beacon regardless of cadence.
+
+The 232 µA floor still has ~225 µA of unexplained draw (vs ESP32-C3 datasheet ~5 µA deep sleep). Likely from the SCD41 breakout pull-ups and the C3's real-world deep sleep being higher than spec. Could be chased further but isn't needed for the 2-week target.
 
 ## Next steps
 
+Two parallel paths depending on whether the display is a hard requirement:
+
+**Display-required path:**
 1. Design the MOSFET load switch on the next PCB revision (display VCC power-gated by a GPIO).
-2. Pick A / B / C for Android reception.
-3. Implement chosen Android approach.
-4. Once display sleep current is fixed, tune `SLEEP_DURATION_US` to the cycle length that meets the budget.
+2. Once display sleep current is fixed, tune `SLEEP_DURATION_US` to the cycle length that meets the budget.
+
+**No-display variant:**
+1. Measure actual active-phase energy with the display removed to confirm the ~340-360 mAs estimate.
+2. Set `SLEEP_DURATION_US` to 6 minutes (or longer for more margin).
+
+**Both paths:**
+3. Pick A / B / C for Android reception.
+4. Implement chosen Android approach.
