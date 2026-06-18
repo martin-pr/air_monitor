@@ -25,7 +25,7 @@ public class MainActivity extends Activity {
     private HistoryGraphView graph;
 
     private static final int COLOR_CO2      = 0xFFD32F2F;  // red
-    private static final int COLOR_TEMP     = 0xFFF57C00;  // orange
+    private static final int COLOR_TEMP     = 0xFF7B1FA2;  // purple
     private static final int COLOR_HUMIDITY = 0xFF1976D2;  // blue
 
     @Override
