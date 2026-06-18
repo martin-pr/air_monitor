@@ -9,4 +9,5 @@
     android:targetCellWidth="2"
     android:targetCellHeight="1"
     android:updatePeriodMillis="1800000"
-    android:widgetCategory="home_screen" />
+    android:initialKeyguardLayout="@layout/widget_air_monitor"
+    android:widgetCategory="home_screen|keyguard" />
