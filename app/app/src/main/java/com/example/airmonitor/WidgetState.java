@@ -29,6 +29,7 @@ public class WidgetState {
             .putString(KEY_TIMESTAMP, DateFormat.getTimeInstance(DateFormat.SHORT).format(new Date()))
             .putString(KEY_STATUS, "")
             .apply();
+        HistoryStore.append(context, json);
         renderWidgets(context);
         ReadingNotification.show(context, json);
     }
