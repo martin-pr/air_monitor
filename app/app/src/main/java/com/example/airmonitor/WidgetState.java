@@ -32,6 +32,7 @@ public class WidgetState {
             .putString(KEY_STATUS, "")
             .apply();
         renderWidgets(context);
+        ReadingNotification.show(context, json);
     }
 
     public static void saveStatus(Context context, String status) {

@@ -25,6 +25,8 @@ public class MainActivity extends Activity {
         text.setText("Air Monitor\n\nGrant Bluetooth permissions, then add the widget.");
         setContentView(text);
 
+        ReadingNotification.createChannel(this);
+
         String[] missing = missingPermissions();
         if (missing.length > 0) {
             requestPermissions(missing, PERMISSION_REQUEST);
@@ -68,6 +70,9 @@ public class MainActivity extends Activity {
             addMissing(permissions, Manifest.permission.BLUETOOTH_CONNECT);
         } else {
             addMissing(permissions, Manifest.permission.ACCESS_FINE_LOCATION);
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            addMissing(permissions, Manifest.permission.POST_NOTIFICATIONS);
         }
         return permissions.toArray(new String[0]);
     }
