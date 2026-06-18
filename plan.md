@@ -45,9 +45,9 @@ This architecture is mostly implemented on the `beacon_mode` branch:
 
 ## Open issues to resolve
 
-### 1. Display bug: empty after 2nd refresh
+### 1. ~~Display bug: empty after 2nd refresh~~ (fixed)
 
-Already fixed on `main` via `display.epd2.writeScreenBufferAgain()` after the initial clear, plus the buffered `showStatus` rewrite. Merge the relevant changes from `main` into `beacon_mode`.
+Fixed via `display.epd2.writeScreenBufferAgain()` after the initial clear plus the buffered `showStatus` rewrite. Plus `showStatus(rstMsg)` so the reset reason becomes line 1 in the buffer rather than being clobbered by the first status update.
 
 ### 2. Android background reception unreliable
 
@@ -70,12 +70,41 @@ The core blocker. A normal `startScan()` callback does not fire when the screen 
 
 Numbers are rough — actual impact varies with phone hardware, Android version, and other background scanners. For reference, a typical phone uses 0.5-1% per hour in standby, so option A or C adds noise-level overhead while option B is genuinely noticeable.
 
-Decision pending. Check current `BleWidgetService.java` implementation first to see which API it uses.
+Decision pending. Current `BleWidgetService.java` (merged from beacon_mode) implements option B — foreground service with `SCAN_MODE_LOW_LATENCY` and `MATCH_MODE_AGGRESSIVE`. Confirmed unreliable when the screen is locked, so this implementation must change regardless. Option A or C is the way forward.
+
+## Measured progress
+
+All numbers measured on hardware: battery-powered, USB disconnected, average current over a steady-state 1-minute cycle (after first boot completes). `beacon_mode` has been merged into `main`.
+
+| Firmware state | Avg current | Battery life | Per-cycle energy |
+|---|---|---|---|
+| Cherry-picked beacon_mode baseline | 8.8 mA | 2.1 days | 528 mAs |
+| SCD41 5s wait → `esp_light_sleep_start()` (`df427b1`) | 7.74 mA | 2.4 days | 464 mAs |
+| Drop `WiFi.mode(WIFI_OFF)` + 200ms delay | 7.33 mA | 2.55 days | 440 mAs |
+
+Per-cycle active energy is now ~440 mAs and is dominated by the BLE advertising window (~150 mAs at 5 s of advertising) and post-deep-sleep boot. Sleep current itself is negligible (<5 µA × ~46 s ≈ 0.23 mAs).
+
+Projected battery life at the current 440 mAs/cycle, varying the deep-sleep duration:
+
+| Cycle | Avg current | Battery life |
+|---|---|---|
+| 1 min | 7.33 mA | 2.55 days |
+| 5 min | 1.47 mA | 12.8 days |
+| 6 min | 1.22 mA | 15.3 days ✓ |
+| 7 min | 1.05 mA | 17.9 days |
+| 10 min | 0.73 mA | 25.7 days |
+
+A **6-minute cycle** is the shortest that meets the 2-week target.
+
+### Notes on optimizations attempted/considered
+
+- `display.hibernate()` between updates: kept (still correct), but power impact was much smaller than the SSD1681 datasheet suggested. Most of the visible refresh time is the e-ink material settling at low current, not the voltage pump.
+- Shortening `ADV_DURATION_MS` (5 s → 2 s): not yet applied — would save ~90 mAs/cycle but couples to the (still-undecided) Android reception strategy. Safe under foreground scanning (option B), risky under PendingIntent (option A) or short-window autoConnect (option C).
+- CPU frequency dance (drop to 40 MHz outside the BLE phase): not applied. BLE requires ≥80 MHz on ESP32-C3; dropping for the non-BLE phase would save ~50 mAs/cycle but adds complexity (APB clock divides change, affecting SPI/I2C timing).
+- `esp_bt_sleep_enable()` before advertising: not tried yet — unknown gain, low risk.
 
 ## Next steps
 
-1. Inspect `app/.../BleWidgetService.java` on `beacon_mode` to identify current Android API usage.
-2. Pick A / B / C for Android reception.
-3. Merge display fixes from `main` into `beacon_mode`.
-4. Measure actual deep-sleep current draw on hardware to validate the architecture math.
-5. Tune wake interval based on measured per-cycle energy and the 1.34 mA budget.
+1. Pick A / B / C for Android reception.
+2. Implement chosen Android approach.
+3. Tune `SLEEP_DURATION_US` to the cycle length that meets the budget with the chosen Android approach (current code defaults to 1 minute).
