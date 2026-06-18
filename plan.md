@@ -82,19 +82,34 @@ All numbers measured on hardware: battery-powered, USB disconnected, average cur
 | SCD41 5s wait → `esp_light_sleep_start()` (`df427b1`) | 7.74 mA | 2.4 days | 464 mAs |
 | Drop `WiFi.mode(WIFI_OFF)` + 200ms delay | 7.33 mA | 2.55 days | 440 mAs |
 
-Per-cycle active energy is now ~440 mAs and is dominated by the BLE advertising window (~150 mAs at 5 s of advertising) and post-deep-sleep boot. Sleep current itself is negligible (<5 µA × ~46 s ≈ 0.23 mAs).
+Per-cycle active energy is ~380 mAs over a ~14 s active phase (about 27 mA average during active). The 5 s BLE advertising window is the largest single chunk.
 
-Projected battery life at the current 440 mAs/cycle, varying the deep-sleep duration:
+### Sleep current is *not* negligible — 1.29 mA measured
 
-| Cycle | Avg current | Battery life |
+Direct measurement of the deep-sleep floor: **1.29 mA**, three orders of magnitude higher than the ~5 µA the ESP32-C3 datasheet suggests. Isolation testing:
+
+| Configuration | Sleep current |
+|---|---|
+| Full board (XIAO + display + SCD41 + battery divider) | 1.29 mA |
+| Display module disconnected | 232 µA |
+| → Display module contribution | **~1.06 mA** |
+
+The e-paper module is drawing ~1 mA continuously during sleep despite `display.hibernate()` and `SPI.end()`. The SSD1681 chip itself in deep sleep is ~5 µA, so this is module-level circuitry on the breakout PCB (boost/charge-pump glue, level shifters, or leakage paths through floating data pins on the SSD1681). The remaining 232 µA floor (no display) is XIAO + SCD41 breakout + ESP32-C3's real-world deep-sleep being higher than datasheet — secondary concern.
+
+### Battery-life projections must include sleep current
+
+With sleep dominant at longer cycles, the math changes dramatically. Per-cycle energy = ~380 mAs active + sleep current × sleep duration:
+
+| Cycle | Sleep at 1.29 mA (today) | Sleep at 232 µA (display power-gated) |
 |---|---|---|
-| 1 min | 7.33 mA | 2.55 days |
-| 5 min | 1.47 mA | 12.8 days |
-| 6 min | 1.22 mA | 15.3 days ✓ |
-| 7 min | 1.05 mA | 17.9 days |
-| 10 min | 0.73 mA | 25.7 days |
+| 1 min | 7.33 mA → 2.55 d (measured) | ~6.5 mA → 2.9 d |
+| 5 min | 2.50 mA → 7.5 d | 1.49 mA → 12.6 d |
+| 6 min | 2.29 mA → 8.2 d | 1.28 mA → 14.7 d ✓ |
+| 10 min | 1.89 mA → 9.9 d | 0.86 mA → 21.8 d |
+| 15 min | 1.69 mA → 11.1 d | 0.65 mA → 28.8 d |
+| ∞ (sleep only) | **1.29 mA → 14.5 d (ceiling)** | 0.232 mA → 80+ d |
 
-A **6-minute cycle** is the shortest that meets the 2-week target.
+**At 1.29 mA sleep, no cycle length reaches 2 weeks** — sleep current alone consumes the budget. The display power-gating must be solved before any cycle-tuning matters.
 
 ### Notes on optimizations attempted/considered
 
@@ -103,8 +118,16 @@ A **6-minute cycle** is the shortest that meets the 2-week target.
 - CPU frequency dance (drop to 40 MHz outside the BLE phase): not applied. BLE requires ≥80 MHz on ESP32-C3; dropping for the non-BLE phase would save ~50 mAs/cycle but adds complexity (APB clock divides change, affecting SPI/I2C timing).
 - `esp_bt_sleep_enable()` before advertising: not tried yet — unknown gain, low risk.
 
+### Display sleep-current fix options
+
+1. **Software — drive all display pins (CS, DC, RST, SCK, MOSI) LOW before deep sleep.** Currently only MOSI is floated. If leakage is through SSD1681 input pins, this may reduce draw. Cheap to try, may not be enough.
+2. **Hardware — high-side P-channel MOSFET load switch on the display VCC.** Gate driven by a GPIO; drive high to cut power before sleep, low to enable on wake. ~3 components (MOSFET + pull-up + GPIO). Fully power-gates the module → 0 µA from display in sleep. The cleanest fix.
+3. **Replace the e-paper module** with one that has lower quiescent draw. Less practical.
+
 ## Next steps
 
-1. Pick A / B / C for Android reception.
-2. Implement chosen Android approach.
-3. Tune `SLEEP_DURATION_US` to the cycle length that meets the budget with the chosen Android approach (current code defaults to 1 minute).
+1. Try the software pin-driving approach as a quick test for display sleep current.
+2. If software fix is insufficient, design the MOSFET load switch on the next PCB revision.
+3. Pick A / B / C for Android reception.
+4. Implement chosen Android approach.
+5. Once display sleep current is fixed, tune `SLEEP_DURATION_US` to the cycle length that meets the budget.
