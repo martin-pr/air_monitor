@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="widget_background">#18202A</color>
-    <color name="text_primary">#F6F8FA</color>
-    <color name="text_secondary">#B6C2CF</color>
+    <color name="widget_background">#FFFFFF</color>
+    <color name="text_primary">#000000</color>
+    <color name="text_secondary">#666666</color>
 </resources>
-

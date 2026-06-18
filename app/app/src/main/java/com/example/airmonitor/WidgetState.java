@@ -6,19 +6,17 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.view.View;
 import android.widget.RemoteViews;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.text.DateFormat;
-import java.util.ArrayList;
 import java.util.Date;
-import java.util.Iterator;
-import java.util.List;
 
 public class WidgetState {
+    private static final String PLACEHOLDER = "--";
+
     private static final String PREFS         = "widget_state";
     private static final String KEY_JSON      = "last_json";
     private static final String KEY_STATUS    = "last_status";
@@ -54,6 +52,12 @@ public class WidgetState {
             } catch (JSONException ignored) {}
         }
 
+        String tempStr     = formatTemperature(json);
+        String humidityStr = formatHumidity(json);
+        String co2Str      = formatCo2(json);
+        String batteryStr  = formatBattery(json);
+        String footer      = footerText(status, time);
+
         AppWidgetManager manager = AppWidgetManager.getInstance(context);
         ComponentName component = new ComponentName(context, AirWidgetProvider.class);
         int[] ids = manager.getAppWidgetIds(component);
@@ -61,24 +65,37 @@ public class WidgetState {
         for (int id : ids) {
             RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.widget_air_monitor);
             views.setOnClickPendingIntent(R.id.widget_root, openAppIntent(context));
-
-            views.setTextViewText(R.id.widget_footer, footerText(status, time));
-            views.setViewVisibility(R.id.widget_footer, View.VISIBLE);
-            views.removeAllViews(R.id.table_rows);
-
-            if (json != null) {
-                Iterator<String> keys = jsonKeys(json).iterator();
-                while (keys.hasNext()) {
-                    String key = keys.next();
-                    RemoteViews row = new RemoteViews(context.getPackageName(), R.layout.widget_row);
-                    row.setTextViewText(R.id.row_key, key);
-                    row.setTextViewText(R.id.row_value, String.valueOf(json.opt(key)));
-                    views.addView(R.id.table_rows, row);
-                }
-            }
-
+            views.setTextViewText(R.id.temp_value,     tempStr);
+            views.setTextViewText(R.id.humidity_value, humidityStr);
+            views.setTextViewText(R.id.co2_value,      co2Str);
+            views.setTextViewText(R.id.battery_value,  batteryStr);
+            views.setTextViewText(R.id.widget_footer,  footer);
             manager.updateAppWidget(id, views);
         }
+    }
+
+    private static String formatTemperature(JSONObject json) {
+        if (json == null) return PLACEHOLDER + "°C";
+        Object temp = json.opt("temp");
+        return temp == null ? PLACEHOLDER + "°C" : String.format("%.1f°C", ((Number)temp).doubleValue());
+    }
+
+    private static String formatHumidity(JSONObject json) {
+        if (json == null) return PLACEHOLDER + "% RH";
+        Object humidity = json.opt("humidity");
+        return humidity == null ? PLACEHOLDER + "% RH" : humidity + "% RH";
+    }
+
+    private static String formatCo2(JSONObject json) {
+        if (json == null) return PLACEHOLDER;
+        Object co2 = json.opt("co2");
+        return co2 == null ? PLACEHOLDER : co2.toString();
+    }
+
+    private static String formatBattery(JSONObject json) {
+        if (json == null) return PLACEHOLDER + "%";
+        Object battery = json.opt("battery");
+        return battery == null ? PLACEHOLDER + "%" : battery + "%";
     }
 
     private static PendingIntent openAppIntent(Context context) {
@@ -88,15 +105,6 @@ public class WidgetState {
             context, 0, intent,
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
-    }
-
-    private static List<String> jsonKeys(JSONObject json) {
-        List<String> keys = new ArrayList<>();
-        Iterator<String> iterator = json.keys();
-        while (iterator.hasNext()) {
-            keys.add(iterator.next());
-        }
-        return keys;
     }
 
     private static String footerText(String status, String time) {
