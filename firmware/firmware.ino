@@ -5,7 +5,6 @@
 #include <Wire.h>
 #include <SensirionI2cScd4x.h>
 
-#include <WiFi.h>
 #include <BLEDevice.h>
 #include <BLEAdvertising.h>
 
@@ -192,8 +191,6 @@ void advertise(uint16_t co2, float temperature, float humidity, uint8_t batPct) 
     mfr[2 + BOFF_RH]      = (uint8_t)(humidity);
     mfr[2 + BOFF_BAT]     = batPct;
 
-    WiFi.mode(WIFI_OFF);
-    delay(200);
     BLEDevice::init("Air Monitor");
     BLEAdvertising *adv = BLEDevice::getAdvertising();
     BLEAdvertisementData advData;
