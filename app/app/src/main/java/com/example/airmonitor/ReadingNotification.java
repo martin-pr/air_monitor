@@ -30,6 +30,13 @@ public class ReadingNotification {
         }
     }
 
+    public static void cancel(Context context) {
+        NotificationManager manager = (NotificationManager)context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager != null) {
+            manager.cancel(NOTIFICATION_ID);
+        }
+    }
+
     public static void show(Context context, JSONObject json) {
         Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
             ? new Notification.Builder(context, NOTIFICATION_CHANNEL_ID)

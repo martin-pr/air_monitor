@@ -10,6 +10,8 @@
     <string name="settings_header">Settings</string>
     <string name="dark_widget_title">Dark widget</string>
     <string name="dark_widget_summary">Use dark colours instead of the light, paper-like card.</string>
+    <string name="notifications_title">Notifications</string>
+    <string name="notifications_summary">Show the latest reading as a persistent notification.</string>
 
     <string name="history_header">Today</string>
     <string name="legend_co2">● CO2 (ppm)</string>

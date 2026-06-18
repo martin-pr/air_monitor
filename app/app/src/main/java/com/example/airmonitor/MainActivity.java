@@ -44,6 +44,16 @@ public class MainActivity extends Activity {
             }
         });
 
+        Switch notifSwitch = findViewById(R.id.notifications_switch);
+        notifSwitch.setChecked(AppSettings.isNotificationsEnabled(this));
+        notifSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton view, boolean checked) {
+                AppSettings.setNotificationsEnabled(MainActivity.this, checked);
+                WidgetState.syncNotification(MainActivity.this);
+            }
+        });
+
         graph = findViewById(R.id.graph);
         ViewGroup.LayoutParams sectionParams = findViewById(R.id.graph_section).getLayoutParams();
         sectionParams.height = getResources().getDisplayMetrics().heightPixels / 2;

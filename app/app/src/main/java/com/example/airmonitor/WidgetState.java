@@ -31,7 +31,20 @@ public class WidgetState {
             .apply();
         HistoryStore.append(context, json);
         renderWidgets(context);
-        ReadingNotification.show(context, json);
+        syncNotification(context);
+    }
+
+    public static void syncNotification(Context context) {
+        if (!AppSettings.isNotificationsEnabled(context)) {
+            ReadingNotification.cancel(context);
+            return;
+        }
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        String jsonStr = prefs.getString(KEY_JSON, null);
+        if (jsonStr == null) return;
+        try {
+            ReadingNotification.show(context, new JSONObject(jsonStr));
+        } catch (JSONException ignored) {}
     }
 
     public static void saveStatus(Context context, String status) {
