@@ -3,7 +3,7 @@
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_background"
+    android:background="@drawable/widget_background_light"
     android:orientation="vertical"
     android:padding="8dp">
 
@@ -18,7 +18,7 @@
             android:layout_height="wrap_content"
             android:layout_alignParentTop="true"
             android:layout_alignParentStart="true"
-            android:textColor="@color/text_primary"
+            android:textColor="@color/widget_text_primary_light"
             android:textSize="14sp" />
 
         <TextView
@@ -27,7 +27,7 @@
             android:layout_height="wrap_content"
             android:layout_alignParentTop="true"
             android:layout_alignParentEnd="true"
-            android:textColor="@color/text_primary"
+            android:textColor="@color/widget_text_primary_light"
             android:textSize="14sp" />
 
         <TextView
@@ -35,7 +35,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_centerInParent="true"
-            android:textColor="@color/text_primary"
+            android:textColor="@color/widget_text_primary_light"
             android:textSize="56sp"
             android:textStyle="bold" />
 
@@ -45,7 +45,7 @@
             android:layout_height="wrap_content"
             android:layout_alignParentBottom="true"
             android:layout_alignParentStart="true"
-            android:textColor="@color/text_primary"
+            android:textColor="@color/widget_text_primary_light"
             android:textSize="14sp" />
 
         <TextView
@@ -54,7 +54,7 @@
             android:layout_height="wrap_content"
             android:layout_alignParentBottom="true"
             android:layout_alignParentEnd="true"
-            android:textColor="@color/text_primary"
+            android:textColor="@color/widget_text_primary_light"
             android:textSize="14sp"
             android:text="CO2 (ppm)" />
     </RelativeLayout>
@@ -65,6 +65,6 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
         android:gravity="end"
-        android:textColor="@color/text_secondary"
+        android:textColor="@color/widget_text_secondary_light"
         android:textSize="9sp" />
 </LinearLayout>

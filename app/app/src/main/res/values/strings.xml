@@ -5,4 +5,9 @@
     <string name="permission_needed">Missing Bluetooth permission</string>
     <string name="open_app_to_connect">Open app to connect</string>
     <string name="scanning">Scanning</string>
+
+    <string name="setup_hint">Grant Bluetooth permissions and add the widget to your home screen.</string>
+    <string name="settings_header">Settings</string>
+    <string name="dark_widget_title">Dark widget</string>
+    <string name="dark_widget_summary">Use dark colours instead of the light, paper-like card.</string>
 </resources>

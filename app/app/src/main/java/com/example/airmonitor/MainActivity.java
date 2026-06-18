@@ -9,7 +9,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
-import android.widget.TextView;
+import android.widget.CompoundButton;
+import android.widget.Switch;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -20,12 +21,18 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        TextView text = new TextView(this);
-        text.setPadding(32, 32, 32, 32);
-        text.setText("Air Monitor\n\nGrant Bluetooth permissions, then add the widget.");
-        setContentView(text);
-
+        setContentView(R.layout.activity_main);
         ReadingNotification.createChannel(this);
+
+        Switch darkSwitch = findViewById(R.id.dark_widget_switch);
+        darkSwitch.setChecked(AppSettings.isDarkWidget(this));
+        darkSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton view, boolean checked) {
+                AppSettings.setDarkWidget(MainActivity.this, checked);
+                WidgetState.renderWidgets(MainActivity.this);
+            }
+        });
 
         String[] missing = missingPermissions();
         if (missing.length > 0) {

@@ -58,6 +58,11 @@ public class WidgetState {
         String batteryStr  = formatBattery(json);
         String footer      = footerText(status, time);
 
+        boolean dark = AppSettings.isDarkWidget(context);
+        int backgroundDrawable = dark ? R.drawable.widget_background_dark : R.drawable.widget_background_light;
+        int primaryColor   = context.getColor(dark ? R.color.widget_text_primary_dark   : R.color.widget_text_primary_light);
+        int secondaryColor = context.getColor(dark ? R.color.widget_text_secondary_dark : R.color.widget_text_secondary_light);
+
         AppWidgetManager manager = AppWidgetManager.getInstance(context);
         ComponentName component = new ComponentName(context, AirWidgetProvider.class);
         int[] ids = manager.getAppWidgetIds(component);
@@ -65,11 +70,18 @@ public class WidgetState {
         for (int id : ids) {
             RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.widget_air_monitor);
             views.setOnClickPendingIntent(R.id.widget_root, openAppIntent(context));
+            views.setInt(R.id.widget_root, "setBackgroundResource", backgroundDrawable);
             views.setTextViewText(R.id.temp_value,     tempStr);
             views.setTextViewText(R.id.humidity_value, humidityStr);
             views.setTextViewText(R.id.co2_value,      co2Str);
             views.setTextViewText(R.id.battery_value,  batteryStr);
             views.setTextViewText(R.id.widget_footer,  footer);
+            views.setTextColor(R.id.temp_value,     primaryColor);
+            views.setTextColor(R.id.humidity_value, primaryColor);
+            views.setTextColor(R.id.co2_value,      primaryColor);
+            views.setTextColor(R.id.battery_value,  primaryColor);
+            views.setTextColor(R.id.co2_label,      primaryColor);
+            views.setTextColor(R.id.widget_footer,  secondaryColor);
             manager.updateAppWidget(id, views);
         }
     }
