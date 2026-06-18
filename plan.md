@@ -120,9 +120,14 @@ With sleep dominant at longer cycles, the math changes dramatically. Per-cycle e
 
 ### Display sleep-current fix options
 
-1. ~~**Software — float all display pins (CS, DC, RST, SCK, MOSI) before deep sleep.**~~ Tried and measured: 1.29 mA → 1.30 mA. No effect. Leakage is not through SSD1681 input pins; it's the module's own circuitry that stays powered as long as VCC is connected. Software cannot fix this.
-2. **Hardware — high-side P-channel MOSFET load switch on the display VCC.** Gate driven by a GPIO; drive high to cut power before sleep, low to enable on wake. ~3 components (MOSFET + pull-up + GPIO). Fully power-gates the module → 0 µA from display in sleep. The only viable fix.
-3. **Replace the e-paper module** with one that has lower quiescent draw. Less practical.
+1. ~~**Software — float all display pins (CS, DC, RST, SCK, MOSI) before deep sleep.**~~ Tried, no effect (1.29 → 1.30 mA). Leakage is not through SSD1681 input pins.
+2. ~~**Software — switch SSD1681 from deep sleep mode 1 to mode 2** (RAM not retained, deeper sleep).~~ Tried via raw SPI `0x10 0x11` after `hibernate()`, no effect (1.30 mA). Module-level leakage is independent of SSD1681 sleep depth.
+3. ~~**Software — hold `EPD_RST` low through deep sleep via `gpio_hold_en()`**~~ on the chance the breakout's boost EN piggybacks off RST. Tried, *worse* (1.36 mA): the boost is not gated by RST, and holding the GPIO output + putting the chip in hardware reset both cost a small amount.
+
+All three software paths confirmed dead. The module's quiescent draw is from its own onboard circuitry (boost converter / glue), independent of any SSD1681 pin or state. **Hardware power-gating is the only remaining option.**
+
+4. **Hardware — high-side P-channel MOSFET load switch on the display VCC.** Gate driven by a GPIO; drive high to cut power before sleep, low to enable on wake. ~3 components (MOSFET + pull-up + GPIO). Fully power-gates the module → 0 µA from display in sleep. The only viable fix.
+5. **Replace the e-paper module** with one that has lower quiescent draw. Less practical.
 
 ## Next steps
 
