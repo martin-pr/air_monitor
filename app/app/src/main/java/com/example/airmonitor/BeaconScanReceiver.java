@@ -111,13 +111,17 @@ public class BeaconScanReceiver extends BroadcastReceiver {
             int co2       = u16le(payload, 1);
             int tempCenti = s16le(payload, 3);
             int humidity  = payload[5] & 0xFF;
-            int battery   = payload[6] & 0xFF;
+            int batteryRaw = payload[6] & 0xFF;
+            // 0xFF is the "charging" sentinel — battery reading is unreliable
+            // during a charge cycle, so the firmware sends this in lieu of a %.
+            boolean charging = batteryRaw == 0xFF;
 
             JSONObject json = new JSONObject();
             json.put("co2", co2);
             json.put("temp", tempCenti / 100.0);
             json.put("humidity", humidity);
-            json.put("battery", battery);
+            if (!charging) json.put("battery", batteryRaw);
+            json.put("charging", charging);
             WidgetState.saveReading(context, json);
         } catch (Exception ignored) {}
     }

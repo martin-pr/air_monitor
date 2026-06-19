@@ -19,7 +19,7 @@
 //   [3-4]  CO2 in ppm (uint16)
 //   [5-6]  temperature in 0.01 °C (int16)
 //   [7]    relative humidity in % (uint8)
-//   [8]    battery percent (uint8)
+//   [8]    battery percent (uint8); 0xFF = charging (battery reading is meaningless during charge)
 //
 // Parsing rule: read [2] first; only parse further fields if version is known.
 // New fields must be appended so older parsers can still read [3-8].
@@ -27,12 +27,13 @@ constexpr uint16_t BEACON_COMPANY_ID  = 0x4D41;   // 'AM' (Air Monitor), LE byte
 constexpr uint8_t  BEACON_VERSION     = 1;
 
 // Byte offsets within the 7-byte payload that follows the 2-byte company ID
-constexpr size_t BOFF_VERSION = 0;  // uint8
-constexpr size_t BOFF_CO2     = 1;  // uint16 LE, ppm
-constexpr size_t BOFF_TEMP    = 3;  // int16  LE, 0.01 °C
-constexpr size_t BOFF_RH      = 5;  // uint8,  RH%
-constexpr size_t BOFF_BAT     = 6;  // uint8,  %
-constexpr size_t BEACON_PAYLOAD_LEN = 7;  // bytes after company ID
+constexpr size_t  BOFF_VERSION = 0;  // uint8
+constexpr size_t  BOFF_CO2     = 1;  // uint16 LE, ppm
+constexpr size_t  BOFF_TEMP    = 3;  // int16  LE, 0.01 °C
+constexpr size_t  BOFF_RH      = 5;  // uint8,  RH%
+constexpr size_t  BOFF_BAT     = 6;  // uint8,  % (0xFF = charging)
+constexpr uint8_t BAT_CHARGING_SENTINEL = 0xFF;
+constexpr size_t  BEACON_PAYLOAD_LEN = 7;  // bytes after company ID
 
 constexpr uint32_t ADV_DURATION_MS    = 5000;
 constexpr uint32_t SCD41_MEASURE_MS   = 5000;   // single-shot measurement time per datasheet
@@ -69,18 +70,28 @@ constexpr std::array<BatPoint, 4> BAT_CURVE = {{
     {3.00f,   0},
 }};
 
-uint8_t readBatteryPercent() {
+// Without a VBUS sense wire we infer charging from battery voltage. The on-board
+// charge IC holds Vbat near 4.20 V during the constant-voltage tail of a charge,
+// so anything above 4.10 V is "charging or topped off". False negatives during
+// the early/mid constant-current phase are unavoidable with this approach.
+constexpr float CHARGING_THRESHOLD_V = 4.10f;
+
+struct BatteryStatus { uint8_t pct; bool charging; };
+
+BatteryStatus readBatteryStatus() {
     float vbat = analogReadMilliVolts(BAT_PIN) * 2.0f / 1000.0f;
-    if (vbat >= BAT_CURVE.front().voltage) return 100;
-    if (vbat <= BAT_CURVE.back().voltage)  return 0;
+    bool charging = vbat > CHARGING_THRESHOLD_V;
+    if (vbat >= BAT_CURVE.front().voltage) return { 100, charging };
+    if (vbat <= BAT_CURVE.back().voltage)  return {   0, charging };
     for (size_t i = 0; i < BAT_CURVE.size() - 1; i++) {
         if (vbat >= BAT_CURVE[i + 1].voltage) {
             float t = (vbat - BAT_CURVE[i + 1].voltage) /
                       (BAT_CURVE[i].voltage - BAT_CURVE[i + 1].voltage);
-            return (uint8_t)(BAT_CURVE[i + 1].pct + t * (BAT_CURVE[i].pct - BAT_CURVE[i + 1].pct));
+            uint8_t pct = (uint8_t)(BAT_CURVE[i + 1].pct + t * (BAT_CURVE[i].pct - BAT_CURVE[i + 1].pct));
+            return { pct, charging };
         }
     }
-    return 0;
+    return { 0, charging };
 }
 
 SensirionI2cScd4x scd4x;
@@ -178,18 +189,18 @@ void updateDisplay(uint16_t co2, float temperature, float humidity, uint8_t batP
     display.hibernate();
 }
 
-void advertise(uint16_t co2, float temperature, float humidity, uint8_t batPct) {
+void advertise(uint16_t co2, float temperature, float humidity, uint8_t batPct, bool charging) {
     int16_t tempCdeg = (int16_t)(temperature * 100.0f);
     uint8_t mfr[2 + BEACON_PAYLOAD_LEN];
     mfr[0] = BEACON_COMPANY_ID & 0xFF;
     mfr[1] = BEACON_COMPANY_ID >> 8;
-    mfr[2 + BOFF_VERSION] = BEACON_VERSION;
-    mfr[2 + BOFF_CO2]     = co2 & 0xFF;
-    mfr[2 + BOFF_CO2 + 1] = co2 >> 8;
-    mfr[2 + BOFF_TEMP]    = (uint8_t)(tempCdeg & 0xFF);
-    mfr[2 + BOFF_TEMP + 1]= (uint8_t)(tempCdeg >> 8);
-    mfr[2 + BOFF_RH]      = (uint8_t)(humidity);
-    mfr[2 + BOFF_BAT]     = batPct;
+    mfr[2 + BOFF_VERSION]  = BEACON_VERSION;
+    mfr[2 + BOFF_CO2]      = co2 & 0xFF;
+    mfr[2 + BOFF_CO2 + 1]  = co2 >> 8;
+    mfr[2 + BOFF_TEMP]     = (uint8_t)(tempCdeg & 0xFF);
+    mfr[2 + BOFF_TEMP + 1] = (uint8_t)(tempCdeg >> 8);
+    mfr[2 + BOFF_RH]       = (uint8_t)(humidity);
+    mfr[2 + BOFF_BAT]      = charging ? BAT_CHARGING_SENTINEL : batPct;
 
     BLEDevice::init("Air Monitor");
     BLEAdvertising *adv = BLEDevice::getAdvertising();
@@ -263,12 +274,13 @@ void setup() {
     scd4x.readMeasurement(co2, temperature, humidity);
     scd4x.powerDown();
 
-    uint8_t batPct = readBatteryPercent();
+    BatteryStatus bat = readBatteryStatus();
 
-    Serial.printf("co2=%d temp=%.1f rh=%.1f bat=%d%%\n", co2, temperature, humidity, batPct);
+    Serial.printf("co2=%d temp=%.1f rh=%.1f bat=%d%% charging=%d\n",
+                  co2, temperature, humidity, bat.pct, bat.charging ? 1 : 0);
 
-    updateDisplay(co2, temperature, humidity, batPct);
-    advertise(co2, temperature, humidity, batPct);
+    updateDisplay(co2, temperature, humidity, bat.pct);
+    advertise(co2, temperature, humidity, bat.pct, bat.charging);
     Wire.end();
     SPI.end();
     pinMode(SPI_MOSI, INPUT);  // GPIO10 = XIAO user LED (active low); float to reduce sleep current

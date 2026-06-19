@@ -81,6 +81,7 @@ public class ReadingNotification {
     }
 
     private static String subText(JSONObject json) {
+        if (json.optBoolean("charging", false)) return "Charging";
         Object battery = json.opt("battery");
         return battery == null ? null : "Battery " + battery + "%";
     }

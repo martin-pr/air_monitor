@@ -91,7 +91,7 @@ The advertisement contains manufacturer-specific data with company ID `0x4D41` (
 | 1–2 | CO2 | uint16 LE | ppm |
 | 3–4 | Temperature | int16 LE | 0.01 °C (e.g. 2350 = 23.50 °C) |
 | 5 | Relative humidity | uint8 | % RH (integer) |
-| 6 | Battery | uint8 | % |
+| 6 | Battery | uint8 | `0–100` = battery %; `0xFF` = charging. Inferred from Vbat > 4.10 V; the % is unreliable during a charge cycle so we send a sentinel instead |
 
 **Parsing rule:** read byte 0 first; only parse further fields if the version is known. New fields will be appended after byte 6, so older parsers can still read the existing fields safely.
 

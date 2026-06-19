@@ -122,6 +122,7 @@ public class WidgetState {
 
     private static String formatBattery(JSONObject json) {
         if (json == null) return PLACEHOLDER + "%";
+        if (json != null && json.optBoolean("charging", false)) return "⚡";
         Object battery = json.opt("battery");
         return battery == null ? PLACEHOLDER + "%" : battery + "%";
     }
