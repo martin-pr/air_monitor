@@ -9,14 +9,20 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.CompoundButton;
+import android.widget.EditText;
 import android.widget.Switch;
 import android.widget.TextView;
 
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
+import java.util.Locale;
 
 public class MainActivity extends Activity {
     private static final int PERMISSION_REQUEST = 1;
@@ -54,6 +60,8 @@ public class MainActivity extends Activity {
             }
         });
 
+        setupTempOffsetControls();
+
         graph = findViewById(R.id.graph);
         ViewGroup.LayoutParams sectionParams = findViewById(R.id.graph_section).getLayoutParams();
         sectionParams.height = getResources().getDisplayMetrics().heightPixels / 2;
@@ -88,6 +96,61 @@ public class MainActivity extends Activity {
         requestBatteryOptimizationExemption();
     }
 
+    private void setupTempOffsetControls() {
+        final EditText input  = findViewById(R.id.temp_offset_value);
+        Button         minus  = findViewById(R.id.temp_offset_minus);
+        Button         plus   = findViewById(R.id.temp_offset_plus);
+
+        input.setText(formatOffset(AppSettings.getTempOffset(this)));
+
+        // Use a flag to suppress the TextWatcher when we update the text from the +/- buttons.
+        final boolean[] suppress = { false };
+
+        input.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            @Override
+            public void afterTextChanged(Editable s) {
+                if (suppress[0]) return;
+                try {
+                    float value = Float.parseFloat(s.toString());
+                    AppSettings.setTempOffset(MainActivity.this, value);
+                    onTempOffsetChanged();
+                } catch (NumberFormatException ignored) {
+                    // partial / invalid text — wait for more typing
+                }
+            }
+        });
+
+        minus.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { adjustTempOffset(input, suppress, -0.1f); }
+        });
+        plus.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { adjustTempOffset(input, suppress, +0.1f); }
+        });
+    }
+
+    private void adjustTempOffset(EditText input, boolean[] suppress, float step) {
+        float current = AppSettings.getTempOffset(this);
+        float next    = Math.round((current + step) * 10f) / 10f;
+        AppSettings.setTempOffset(this, next);
+        suppress[0] = true;
+        input.setText(formatOffset(next));
+        input.setSelection(input.getText().length());
+        suppress[0] = false;
+        onTempOffsetChanged();
+    }
+
+    private static String formatOffset(float offset) {
+        return String.format(Locale.US, "%.1f", offset);
+    }
+
+    private void onTempOffsetChanged() {
+        WidgetState.renderWidgets(this);
+        WidgetState.syncNotification(this);
+        refreshGraphs();
+    }
+
     private void refreshGraphs() {
         Calendar cal = Calendar.getInstance();
         cal.set(Calendar.HOUR_OF_DAY, 0);
@@ -98,13 +161,14 @@ public class MainActivity extends Activity {
         long endTs   = startTs + DAY_MS;
 
         List<HistoryStore.Entry> entries = HistoryStore.read(this);
+        float tempOffset = AppSettings.getTempOffset(this);
         List<HistoryGraphView.Point> co2Points      = new ArrayList<>();
         List<HistoryGraphView.Point> tempPoints     = new ArrayList<>();
         List<HistoryGraphView.Point> humidityPoints = new ArrayList<>();
         for (HistoryStore.Entry e : entries) {
             if (e.ts < startTs || e.ts >= endTs) continue;
             co2Points.add(new HistoryGraphView.Point(e.ts, e.co2));
-            tempPoints.add(new HistoryGraphView.Point(e.ts, e.temp));
+            tempPoints.add(new HistoryGraphView.Point(e.ts, e.temp + tempOffset));
             humidityPoints.add(new HistoryGraphView.Point(e.ts, e.humidity));
         }
 

@@ -45,7 +45,7 @@ public class ReadingNotification {
         Notification notification = builder
             .setSmallIcon(R.drawable.ic_stat_air)
             .setContentTitle(title(json))
-            .setContentText(text(json))
+            .setContentText(text(context, json))
             .setSubText(subText(json))
             .setContentIntent(openAppIntent(context))
             .setOngoing(true)        // user can't swipe it away
@@ -65,11 +65,14 @@ public class ReadingNotification {
         return co2 == null ? "Air Monitor" : "CO2 " + co2 + " ppm";
     }
 
-    private static String text(JSONObject json) {
+    private static String text(Context context, JSONObject json) {
         StringBuilder text = new StringBuilder();
         Object temp = json.opt("temp");
         Object humidity = json.opt("humidity");
-        if (temp != null) text.append(temp).append("°C");
+        if (temp != null) {
+            double adjusted = ((Number)temp).doubleValue() + AppSettings.getTempOffset(context);
+            text.append(String.format("%.1f", adjusted)).append("°C");
+        }
         if (humidity != null) {
             if (text.length() > 0) text.append(" · ");
             text.append(humidity).append("% RH");

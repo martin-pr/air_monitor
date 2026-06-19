@@ -7,6 +7,8 @@ public class AppSettings {
     private static final String PREFS                  = "settings";
     private static final String KEY_DARK_WIDGET        = "dark_widget";
     private static final String KEY_NOTIFICATIONS      = "notifications";
+    private static final String KEY_TEMP_OFFSET        = "temp_offset";
+    private static final float  DEFAULT_TEMP_OFFSET    = 4.0f;
 
     public static boolean isDarkWidget(Context context) {
         return prefs(context).getBoolean(KEY_DARK_WIDGET, false);
@@ -22,6 +24,14 @@ public class AppSettings {
 
     public static void setNotificationsEnabled(Context context, boolean enabled) {
         prefs(context).edit().putBoolean(KEY_NOTIFICATIONS, enabled).apply();
+    }
+
+    public static float getTempOffset(Context context) {
+        return prefs(context).getFloat(KEY_TEMP_OFFSET, DEFAULT_TEMP_OFFSET);
+    }
+
+    public static void setTempOffset(Context context, float offset) {
+        prefs(context).edit().putFloat(KEY_TEMP_OFFSET, offset).apply();
     }
 
     private static SharedPreferences prefs(Context context) {

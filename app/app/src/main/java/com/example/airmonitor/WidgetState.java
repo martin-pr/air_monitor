@@ -66,7 +66,7 @@ public class WidgetState {
             } catch (JSONException ignored) {}
         }
 
-        String tempStr     = formatTemperature(json);
+        String tempStr     = formatTemperature(context, json);
         String humidityStr = formatHumidity(json);
         String co2Str      = formatCo2(json);
         String batteryStr  = formatBattery(json);
@@ -100,10 +100,12 @@ public class WidgetState {
         }
     }
 
-    private static String formatTemperature(JSONObject json) {
+    private static String formatTemperature(Context context, JSONObject json) {
         if (json == null) return PLACEHOLDER + "°C";
         Object temp = json.opt("temp");
-        return temp == null ? PLACEHOLDER + "°C" : String.format("%.1f°C", ((Number)temp).doubleValue());
+        if (temp == null) return PLACEHOLDER + "°C";
+        double adjusted = ((Number)temp).doubleValue() + AppSettings.getTempOffset(context);
+        return String.format("%.1f°C", adjusted);
     }
 
     private static String formatHumidity(JSONObject json) {
