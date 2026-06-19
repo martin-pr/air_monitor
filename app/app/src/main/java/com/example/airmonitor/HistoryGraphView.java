@@ -280,7 +280,7 @@ public class HistoryGraphView extends View {
         float textWidth = labelPaint.measureText(text);
         canvas.save();
         canvas.rotate(-90, pivotX, pivotY);
-        canvas.drawText(text, pivotX - textWidth / 2f, pivotY + sp(9) * 0.35f, labelPaint);
+        canvas.drawText(text, pivotX - textWidth, pivotY + sp(9) * 0.35f, labelPaint);
         canvas.restore();
     }
 
