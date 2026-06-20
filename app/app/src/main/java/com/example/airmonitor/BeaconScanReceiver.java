@@ -25,7 +25,7 @@ public class BeaconScanReceiver extends BroadcastReceiver {
 
     private static final int BEACON_COMPANY_ID  = 0x4D41;  // 'AM'
     private static final int BEACON_VERSION     = 1;
-    private static final int BEACON_PAYLOAD_LEN = 7;
+    private static final int BEACON_PAYLOAD_LEN = 8;
 
     public static void register(Context context) {
         if (!hasBlePermissions(context)) {
@@ -108,15 +108,17 @@ public class BeaconScanReceiver extends BroadcastReceiver {
         }
 
         try {
-            int co2       = u16le(payload, 1);
-            int tempCenti = s16le(payload, 3);
-            int humidity  = payload[5] & 0xFF;
-            int batteryRaw = payload[6] & 0xFF;
+            int status     = payload[1] & 0xFF;
+            int co2        = u16le(payload, 2);
+            int tempCenti  = s16le(payload, 4);
+            int humidity   = payload[6] & 0xFF;
+            int batteryRaw = payload[7] & 0xFF;
             // 0xFF is the "charging" sentinel — battery reading is unreliable
             // during a charge cycle, so the firmware sends this in lieu of a %.
             boolean charging = batteryRaw == 0xFF;
 
             JSONObject json = new JSONObject();
+            json.put("status", status);
             json.put("co2", co2);
             json.put("temp", tempCenti / 100.0);
             json.put("humidity", humidity);

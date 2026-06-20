@@ -16,6 +16,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.EditText;
+import android.widget.ListView;
 import android.widget.Switch;
 import android.widget.TextView;
 
@@ -23,6 +24,7 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
@@ -35,12 +37,20 @@ public class MainActivity extends Activity {
     private TextView valueTemp;
     private TextView valueHumidity;
     private TextView valueBattery;
+    private ListView logList;
     private View tabGraphContent;
+    private View tabLogContent;
     private View tabSettingsContent;
     private View tabGraphButton;
+    private View tabLogButton;
     private View tabSettingsButton;
     private TextView tabGraphLabel;
+    private TextView tabLogLabel;
     private TextView tabSettingsLabel;
+
+    private static final int TAB_GRAPH    = 0;
+    private static final int TAB_LOG      = 1;
+    private static final int TAB_SETTINGS = 2;
 
     private static final int TAB_COLOR_SELECTED   = 0xFF000000;
     private static final int TAB_COLOR_UNSELECTED = 0x99000000;
@@ -82,6 +92,7 @@ public class MainActivity extends Activity {
         valueTemp     = findViewById(R.id.value_temp);
         valueHumidity = findViewById(R.id.value_humidity);
         valueBattery  = findViewById(R.id.value_battery);
+        logList       = findViewById(R.id.log_list);
 
         ((TextView)findViewById(R.id.legend_co2)).setTextColor(COLOR_CO2);
         ((TextView)findViewById(R.id.legend_temp)).setTextColor(COLOR_TEMP);
@@ -117,33 +128,55 @@ public class MainActivity extends Activity {
 
     private void setupTabs() {
         tabGraphContent    = findViewById(R.id.tab_graph);
+        tabLogContent      = findViewById(R.id.tab_log);
         tabSettingsContent = findViewById(R.id.tab_settings);
         tabGraphButton     = findViewById(R.id.tab_btn_graph);
+        tabLogButton       = findViewById(R.id.tab_btn_log);
         tabSettingsButton  = findViewById(R.id.tab_btn_settings);
         tabGraphLabel      = findViewById(R.id.tab_btn_graph_label);
+        tabLogLabel        = findViewById(R.id.tab_btn_log_label);
         tabSettingsLabel   = findViewById(R.id.tab_btn_settings_label);
 
         tabGraphButton.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { selectTab(true); }
+            @Override public void onClick(View v) { selectTab(TAB_GRAPH); }
+        });
+        tabLogButton.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { selectTab(TAB_LOG); }
         });
         tabSettingsButton.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { selectTab(false); }
+            @Override public void onClick(View v) { selectTab(TAB_SETTINGS); }
         });
 
-        selectTab(true);  // default: graph
+        selectTab(TAB_GRAPH);
     }
 
-    private void selectTab(boolean graphTab) {
-        tabGraphContent.setVisibility(graphTab ? View.VISIBLE : View.GONE);
-        tabSettingsContent.setVisibility(graphTab ? View.GONE : View.VISIBLE);
-        tabGraphLabel.setTextColor(graphTab    ? TAB_COLOR_SELECTED : TAB_COLOR_UNSELECTED);
-        tabSettingsLabel.setTextColor(graphTab ? TAB_COLOR_UNSELECTED : TAB_COLOR_SELECTED);
-        tabGraphLabel.setTypeface(null,    graphTab ? Typeface.BOLD : Typeface.NORMAL);
-        tabSettingsLabel.setTypeface(null, graphTab ? Typeface.NORMAL : Typeface.BOLD);
-        if (graphTab) {
+    private void selectTab(int tab) {
+        tabGraphContent.setVisibility(   tab == TAB_GRAPH    ? View.VISIBLE : View.GONE);
+        tabLogContent.setVisibility(     tab == TAB_LOG      ? View.VISIBLE : View.GONE);
+        tabSettingsContent.setVisibility(tab == TAB_SETTINGS ? View.VISIBLE : View.GONE);
+
+        applyTabLabelStyle(tabGraphLabel,    tab == TAB_GRAPH);
+        applyTabLabelStyle(tabLogLabel,      tab == TAB_LOG);
+        applyTabLabelStyle(tabSettingsLabel, tab == TAB_SETTINGS);
+
+        if (tab == TAB_GRAPH) {
             refreshGraphs();
             refreshValues();
+        } else if (tab == TAB_LOG) {
+            refreshLog();
         }
+    }
+
+    private static void applyTabLabelStyle(TextView label, boolean selected) {
+        label.setTextColor(selected ? TAB_COLOR_SELECTED : TAB_COLOR_UNSELECTED);
+        label.setTypeface(null, selected ? Typeface.BOLD : Typeface.NORMAL);
+    }
+
+    private void refreshLog() {
+        List<HistoryStore.Entry> entries = HistoryStore.read(this);
+        // Most recent first.
+        Collections.reverse(entries);
+        logList.setAdapter(new LogAdapter(this, entries, AppSettings.getTempOffset(this)));
     }
 
     private void setupTempOffsetControls() {

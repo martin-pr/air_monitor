@@ -18,16 +18,22 @@ public class HistoryStore {
     private static final long   RETENTION_MS  = 24 * 60 * 60 * 1000L;
 
     public static final class Entry {
-        public final long   ts;
-        public final int    co2;
-        public final double temp;
-        public final double humidity;
+        public final long    ts;
+        public final int     co2;
+        public final double  temp;
+        public final double  humidity;
+        public final int     battery;   // 0–100, or -1 when charging / unknown
+        public final boolean charging;
+        public final int     status;    // esp_reset_reason_t (8 = deep sleep wake = normal)
 
-        public Entry(long ts, int co2, double temp, double humidity) {
+        public Entry(long ts, int co2, double temp, double humidity, int battery, boolean charging, int status) {
             this.ts = ts;
             this.co2 = co2;
             this.temp = temp;
             this.humidity = humidity;
+            this.battery = battery;
+            this.charging = charging;
+            this.status = status;
         }
     }
 
@@ -38,7 +44,10 @@ public class HistoryStore {
             now,
             reading.optInt("co2", 0),
             reading.optDouble("temp", 0.0),
-            reading.optDouble("humidity", 0.0)
+            reading.optDouble("humidity", 0.0),
+            reading.optInt("battery", -1),
+            reading.optBoolean("charging", false),
+            reading.optInt("status", 8)  // 8 = ESP_RST_DEEPSLEEP (normal)
         ));
 
         long cutoff = now - RETENTION_MS;
@@ -66,7 +75,10 @@ public class HistoryStore {
                     obj.getLong("ts"),
                     obj.getInt("co2"),
                     obj.getDouble("temp"),
-                    obj.getDouble("humidity")
+                    obj.getDouble("humidity"),
+                    obj.optInt("battery", -1),
+                    obj.optBoolean("charging", false),
+                    obj.optInt("status", 8)
                 ));
             }
             return entries;
@@ -85,6 +97,9 @@ public class HistoryStore {
                 obj.put("co2", e.co2);
                 obj.put("temp", e.temp);
                 obj.put("humidity", e.humidity);
+                obj.put("battery", e.battery);
+                obj.put("charging", e.charging);
+                obj.put("status", e.status);
                 arr.put(obj);
             }
             try (FileWriter writer = new FileWriter(file)) {

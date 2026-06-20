@@ -29,6 +29,15 @@
 
     <string name="tab_graph_icon">📊</string>
     <string name="tab_graph_label">Graph</string>
+    <string name="tab_log_icon">📜</string>
+    <string name="tab_log_label">Log</string>
     <string name="tab_settings_icon">⚙️</string>
     <string name="tab_settings_label">Settings</string>
+
+    <string name="log_col_time">Time</string>
+    <string name="log_col_co2">CO2</string>
+    <string name="log_col_temp">Temp</string>
+    <string name="log_col_humidity">RH</string>
+    <string name="log_col_battery">Bat</string>
+    <string name="log_col_status">Rst</string>
 </resources>
