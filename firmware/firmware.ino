@@ -23,6 +23,12 @@
 //
 // Parsing rule: read [2] first; only parse further fields if version is known.
 // New fields must be appended so older parsers can still read [3-8].
+// Build-time toggle for the e-paper display. Set to false for sensor-only
+// builds (no display wired). When false, all display code is elided and
+// display.init() — which would otherwise block on a floating BUSY pin — is
+// skipped entirely.
+constexpr bool DISPLAY_ENABLED = true;
+
 constexpr uint16_t BEACON_COMPANY_ID  = 0x4D41;   // 'AM' (Air Monitor), LE bytes: 0x41 0x4D
 constexpr uint8_t  BEACON_VERSION     = 1;
 
@@ -101,6 +107,7 @@ GxEPD2_BW<GxEPD2_154_D67, GxEPD2_154_D67::HEIGHT> display(
 );
 
 void showStatus(const char* msg) {
+    if constexpr (!DISPLAY_ENABLED) return;
     static std::array<std::string, MAX_STATUS_LINES> lines;
     static size_t lineCount = 0;
 
@@ -133,6 +140,7 @@ void showStatus(const char* msg) {
 }
 
 void updateDisplay(uint16_t co2, float temperature, float humidity, uint8_t batPct) {
+    if constexpr (!DISPLAY_ENABLED) return;
     char co2Str[8], tempStr[8], rhStr[12], batStr[6];
     snprintf(co2Str, sizeof(co2Str), "%d", co2);
     snprintf(tempStr, sizeof(tempStr), "%.1f", temperature);
@@ -228,9 +236,11 @@ void setup() {
     Serial.begin(115200);
     analogSetAttenuation(ADC_11db);  // 0–3.9 V range; covers 1.5–2.1 V from the battery divider
 
-    SPI.begin(SPI_SCK, /*MISO=*/-1, SPI_MOSI, EPD_CS);
-    display.init(115200);
-    display.setRotation(1);
+    if constexpr (DISPLAY_ENABLED) {
+        SPI.begin(SPI_SCK, /*MISO=*/-1, SPI_MOSI, EPD_CS);
+        display.init(115200);
+        display.setRotation(1);
+    }
 
     Wire.begin();
     scd4x.begin(Wire, SCD41_I2C_ADDR_62);
@@ -238,11 +248,13 @@ void setup() {
     bool firstBoot = (esp_reset_reason() != ESP_RST_DEEPSLEEP);
 
     if (firstBoot) {
-        display.setFullWindow();
-        display.firstPage();
-        do { display.fillScreen(GxEPD_WHITE); } while (display.nextPage());
-        display.epd2.writeScreenBufferAgain();  // sync SSD1681 current/previous RAM after clear
-        display.hibernate();
+        if constexpr (DISPLAY_ENABLED) {
+            display.setFullWindow();
+            display.firstPage();
+            do { display.fillScreen(GxEPD_WHITE); } while (display.nextPage());
+            display.epd2.writeScreenBufferAgain();  // sync SSD1681 current/previous RAM after clear
+            display.hibernate();
+        }
 
         const char* rstMsg = "RST: poweron/pin";
         switch (esp_reset_reason()) {
@@ -282,7 +294,7 @@ void setup() {
     updateDisplay(co2, temperature, humidity, bat.pct);
     advertise(co2, temperature, humidity, bat.pct, bat.charging);
     Wire.end();
-    SPI.end();
+    if constexpr (DISPLAY_ENABLED) SPI.end();
     pinMode(SPI_MOSI, INPUT);  // GPIO10 = XIAO user LED (active low); float to reduce sleep current
     esp_deep_sleep(SLEEP_DURATION_US);
 }
