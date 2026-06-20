@@ -18,7 +18,17 @@
     <string name="temp_offset_plus">+</string>
 
     <string name="history_header">Today</string>
+    <string name="value_label_co2">CO2</string>
+    <string name="value_label_temp">Temp</string>
+    <string name="value_label_humidity">RH</string>
+    <string name="value_label_battery">Bat</string>
+    <string name="value_placeholder">--</string>
     <string name="legend_co2">● CO2 (ppm)</string>
     <string name="legend_temp">● Temp (°C)</string>
     <string name="legend_humidity">● Humidity (%)</string>
+
+    <string name="tab_graph_icon">📊</string>
+    <string name="tab_graph_label">Graph</string>
+    <string name="tab_settings_icon">⚙️</string>
+    <string name="tab_settings_label">Settings</string>
 </resources>

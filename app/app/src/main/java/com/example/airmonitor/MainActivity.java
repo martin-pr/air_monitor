@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -12,12 +13,13 @@ import android.provider.Settings;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.Switch;
 import android.widget.TextView;
+
+import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -29,6 +31,19 @@ public class MainActivity extends Activity {
     private static final long DAY_MS = 24 * 60 * 60 * 1000L;
 
     private HistoryGraphView graph;
+    private TextView valueCo2;
+    private TextView valueTemp;
+    private TextView valueHumidity;
+    private TextView valueBattery;
+    private View tabGraphContent;
+    private View tabSettingsContent;
+    private View tabGraphButton;
+    private View tabSettingsButton;
+    private TextView tabGraphLabel;
+    private TextView tabSettingsLabel;
+
+    private static final int TAB_COLOR_SELECTED   = 0xFF000000;
+    private static final int TAB_COLOR_UNSELECTED = 0x99000000;
 
     private static final int COLOR_CO2      = 0xFFD32F2F;  // red
     private static final int COLOR_TEMP     = 0xFF7B1FA2;  // purple
@@ -63,13 +78,16 @@ public class MainActivity extends Activity {
         setupTempOffsetControls();
 
         graph = findViewById(R.id.graph);
-        ViewGroup.LayoutParams sectionParams = findViewById(R.id.graph_section).getLayoutParams();
-        sectionParams.height = getResources().getDisplayMetrics().heightPixels / 2;
-        findViewById(R.id.graph_section).setLayoutParams(sectionParams);
+        valueCo2      = findViewById(R.id.value_co2);
+        valueTemp     = findViewById(R.id.value_temp);
+        valueHumidity = findViewById(R.id.value_humidity);
+        valueBattery  = findViewById(R.id.value_battery);
 
         ((TextView)findViewById(R.id.legend_co2)).setTextColor(COLOR_CO2);
         ((TextView)findViewById(R.id.legend_temp)).setTextColor(COLOR_TEMP);
         ((TextView)findViewById(R.id.legend_humidity)).setTextColor(COLOR_HUMIDITY);
+
+        setupTabs();
 
         String[] missing = missingPermissions();
         if (missing.length > 0) {
@@ -83,6 +101,7 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         refreshGraphs();
+        refreshValues();
     }
 
     @Override
@@ -94,6 +113,37 @@ public class MainActivity extends Activity {
     private void onPermissionsReady() {
         BeaconScanReceiver.register(this);
         requestBatteryOptimizationExemption();
+    }
+
+    private void setupTabs() {
+        tabGraphContent    = findViewById(R.id.tab_graph);
+        tabSettingsContent = findViewById(R.id.tab_settings);
+        tabGraphButton     = findViewById(R.id.tab_btn_graph);
+        tabSettingsButton  = findViewById(R.id.tab_btn_settings);
+        tabGraphLabel      = findViewById(R.id.tab_btn_graph_label);
+        tabSettingsLabel   = findViewById(R.id.tab_btn_settings_label);
+
+        tabGraphButton.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { selectTab(true); }
+        });
+        tabSettingsButton.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { selectTab(false); }
+        });
+
+        selectTab(true);  // default: graph
+    }
+
+    private void selectTab(boolean graphTab) {
+        tabGraphContent.setVisibility(graphTab ? View.VISIBLE : View.GONE);
+        tabSettingsContent.setVisibility(graphTab ? View.GONE : View.VISIBLE);
+        tabGraphLabel.setTextColor(graphTab    ? TAB_COLOR_SELECTED : TAB_COLOR_UNSELECTED);
+        tabSettingsLabel.setTextColor(graphTab ? TAB_COLOR_UNSELECTED : TAB_COLOR_SELECTED);
+        tabGraphLabel.setTypeface(null,    graphTab ? Typeface.BOLD : Typeface.NORMAL);
+        tabSettingsLabel.setTypeface(null, graphTab ? Typeface.NORMAL : Typeface.BOLD);
+        if (graphTab) {
+            refreshGraphs();
+            refreshValues();
+        }
     }
 
     private void setupTempOffsetControls() {
@@ -149,6 +199,39 @@ public class MainActivity extends Activity {
         WidgetState.renderWidgets(this);
         WidgetState.syncNotification(this);
         refreshGraphs();
+    }
+
+    private void refreshValues() {
+        JSONObject json = WidgetState.getLastReading(this);
+        String placeholder = getString(R.string.value_placeholder);
+        if (json == null) {
+            valueCo2.setText(placeholder);
+            valueTemp.setText(placeholder);
+            valueHumidity.setText(placeholder);
+            valueBattery.setText(placeholder);
+            return;
+        }
+
+        Object co2 = json.opt("co2");
+        valueCo2.setText(co2 == null ? placeholder : co2 + " ppm");
+
+        Object temp = json.opt("temp");
+        if (temp == null) {
+            valueTemp.setText(placeholder);
+        } else {
+            double adjusted = ((Number)temp).doubleValue() + AppSettings.getTempOffset(this);
+            valueTemp.setText(String.format(Locale.US, "%.1f°C", adjusted));
+        }
+
+        Object humidity = json.opt("humidity");
+        valueHumidity.setText(humidity == null ? placeholder : humidity + "%");
+
+        if (json.optBoolean("charging", false)) {
+            valueBattery.setText("⚡");
+        } else {
+            Object battery = json.opt("battery");
+            valueBattery.setText(battery == null ? placeholder : battery + "%");
+        }
     }
 
     private void refreshGraphs() {

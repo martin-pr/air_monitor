@@ -53,6 +53,17 @@ public class WidgetState {
         renderWidgets(context);
     }
 
+    public static JSONObject getLastReading(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        String jsonStr = prefs.getString(KEY_JSON, null);
+        if (jsonStr == null) return null;
+        try {
+            return new JSONObject(jsonStr);
+        } catch (JSONException e) {
+            return null;
+        }
+    }
+
     public static void renderWidgets(Context context) {
         SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         String jsonStr = prefs.getString(KEY_JSON, null);
