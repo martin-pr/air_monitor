@@ -88,12 +88,33 @@ The advertisement contains manufacturer-specific data with company ID `0x4D41` (
 | Byte offset (after company ID) | Field | Type | Notes |
 |---|---|---|---|
 | 0 | Protocol version | uint8 | Currently `1`; check before parsing further fields |
-| 1–2 | CO2 | uint16 LE | ppm |
-| 3–4 | Temperature | int16 LE | 0.01 °C (e.g. 2350 = 23.50 °C) |
-| 5 | Relative humidity | uint8 | % RH (integer) |
-| 6 | Battery | uint8 | `0–100` = battery %; `0xFF` = charging. Inferred from Vbat > 4.10 V; the % is unreliable during a charge cycle so we send a sentinel instead |
+| 1 | Status | uint8 | Last `esp_reset_reason_t`. `8` = normal wake from deep sleep; any other value means the chip cold-booted (see table below) |
+| 2–3 | CO2 | uint16 LE | ppm |
+| 4–5 | Temperature | int16 LE | 0.01 °C (e.g. 2350 = 23.50 °C) |
+| 6 | Relative humidity | uint8 | % RH (integer) |
+| 7 | Battery | uint8 | `0–100` = battery %; `0xFF` = charging. Inferred from Vbat > 4.10 V; the % is unreliable during a charge cycle so we send a sentinel instead |
 
-**Parsing rule:** read byte 0 first; only parse further fields if the version is known. New fields will be appended after byte 6, so older parsers can still read the existing fields safely.
+**Parsing rule:** read byte 0 first; only parse further fields if the version is known. The protocol is still under development — the version byte is bumped on any layout change rather than maintaining backward compatibility.
+
+#### Status (reset reason) values
+
+The raw `esp_reset_reason_t` enum is exposed as-is. The interesting values for this firmware:
+
+| Value | Name | Meaning |
+|---|---|---|
+| 0 | `ESP_RST_UNKNOWN` | Reason could not be determined |
+| 1 | `ESP_RST_POWERON` | Cold boot — USB plugged in, battery connected, or RESET button |
+| 3 | `ESP_RST_SW` | Software-triggered `esp_restart()` (not used by this firmware) |
+| 4 | `ESP_RST_PANIC` | Firmware crash (exception / abort) |
+| 5 | `ESP_RST_INT_WDT` | Interrupt watchdog fired |
+| 6 | `ESP_RST_TASK_WDT` | FreeRTOS task watchdog fired |
+| 7 | `ESP_RST_WDT` | RTC watchdog (other) |
+| 8 | `ESP_RST_DEEPSLEEP` | **Normal** — woke from `esp_deep_sleep()` |
+| 9 | `ESP_RST_BROWNOUT` | Vbat sagged below the brownout threshold |
+| 11 | `ESP_RST_USB` | USB peripheral triggered reset |
+| 12 | `ESP_RST_JTAG` | JTAG triggered reset |
+
+Values not in this table can still appear (`ESP_RST_EFUSE = 13`, `ESP_RST_PWR_GLITCH = 14`, `ESP_RST_CPU_LOCKUP = 15`, `ESP_RST_SDIO = 10`, `ESP_RST_EXT = 2`) — they're unlikely on this hardware/firmware but should be passed through unchanged.
 
 The device advertises as **Air Monitor** (MAC `ac:27:6e:7e:c7:f4`). Scanners can filter by local name or company ID.
 

@@ -13,16 +13,17 @@
 #include <Fonts/FreeSans12pt7b.h>
 #include <Fonts/FreeSansBold24pt7b.h>
 
-// Beacon advertisement — manufacturer-specific data (9 bytes, little-endian):
+// Beacon advertisement — manufacturer-specific data (10 bytes, little-endian):
 //   [0-1]  company ID: 0x41 0x4D ('AM')
 //   [2]    protocol version (BEACON_VERSION); bump when layout changes
-//   [3-4]  CO2 in ppm (uint16)
-//   [5-6]  temperature in 0.01 °C (int16)
-//   [7]    relative humidity in % (uint8)
-//   [8]    battery percent (uint8); 0xFF = charging (battery reading is meaningless during charge)
+//   [3]    status: esp_reset_reason_t as uint8 (8 = ESP_RST_DEEPSLEEP = normal wake;
+//          anything else means the chip cold-booted — power-on, brownout, panic, wdt, etc.)
+//   [4-5]  CO2 in ppm (uint16)
+//   [6-7]  temperature in 0.01 °C (int16)
+//   [8]    relative humidity in % (uint8)
+//   [9]    battery percent (uint8); 0xFF = charging (battery reading is meaningless during charge)
 //
 // Parsing rule: read [2] first; only parse further fields if version is known.
-// New fields must be appended so older parsers can still read [3-8].
 // Build-time toggle for the e-paper display. Set to false for sensor-only
 // builds (no display wired). When false, all display code is elided and
 // display.init() — which would otherwise block on a floating BUSY pin — is
@@ -34,12 +35,13 @@ constexpr uint8_t  BEACON_VERSION     = 1;
 
 // Byte offsets within the 7-byte payload that follows the 2-byte company ID
 constexpr size_t  BOFF_VERSION = 0;  // uint8
-constexpr size_t  BOFF_CO2     = 1;  // uint16 LE, ppm
-constexpr size_t  BOFF_TEMP    = 3;  // int16  LE, 0.01 °C
-constexpr size_t  BOFF_RH      = 5;  // uint8,  RH%
-constexpr size_t  BOFF_BAT     = 6;  // uint8,  % (0xFF = charging)
+constexpr size_t  BOFF_STATUS  = 1;  // uint8,  esp_reset_reason_t (8 = deep sleep wake = normal)
+constexpr size_t  BOFF_CO2     = 2;  // uint16 LE, ppm
+constexpr size_t  BOFF_TEMP    = 4;  // int16  LE, 0.01 °C
+constexpr size_t  BOFF_RH      = 6;  // uint8,  RH%
+constexpr size_t  BOFF_BAT     = 7;  // uint8,  % (0xFF = charging)
 constexpr uint8_t BAT_CHARGING_SENTINEL = 0xFF;
-constexpr size_t  BEACON_PAYLOAD_LEN = 7;  // bytes after company ID
+constexpr size_t  BEACON_PAYLOAD_LEN = 8;  // bytes after company ID
 
 constexpr uint32_t ADV_DURATION_MS    = 5000;
 constexpr uint32_t SCD41_MEASURE_MS   = 5000;   // single-shot measurement time per datasheet
@@ -197,12 +199,13 @@ void updateDisplay(uint16_t co2, float temperature, float humidity, uint8_t batP
     display.hibernate();
 }
 
-void advertise(uint16_t co2, float temperature, float humidity, uint8_t batPct, bool charging) {
+void advertise(uint16_t co2, float temperature, float humidity, uint8_t batPct, bool charging, uint8_t status) {
     int16_t tempCdeg = (int16_t)(temperature * 100.0f);
     uint8_t mfr[2 + BEACON_PAYLOAD_LEN];
     mfr[0] = BEACON_COMPANY_ID & 0xFF;
     mfr[1] = BEACON_COMPANY_ID >> 8;
     mfr[2 + BOFF_VERSION]  = BEACON_VERSION;
+    mfr[2 + BOFF_STATUS]   = status;
     mfr[2 + BOFF_CO2]      = co2 & 0xFF;
     mfr[2 + BOFF_CO2 + 1]  = co2 >> 8;
     mfr[2 + BOFF_TEMP]     = (uint8_t)(tempCdeg & 0xFF);
@@ -245,7 +248,8 @@ void setup() {
     Wire.begin();
     scd4x.begin(Wire, SCD41_I2C_ADDR_62);
 
-    bool firstBoot = (esp_reset_reason() != ESP_RST_DEEPSLEEP);
+    esp_reset_reason_t resetReason = esp_reset_reason();
+    bool firstBoot = (resetReason != ESP_RST_DEEPSLEEP);
 
     if (firstBoot) {
         if constexpr (DISPLAY_ENABLED) {
@@ -257,7 +261,7 @@ void setup() {
         }
 
         const char* rstMsg = "RST: poweron/pin";
-        switch (esp_reset_reason()) {
+        switch (resetReason) {
             case ESP_RST_BROWNOUT: rstMsg = "RST: brownout";    break;
             case ESP_RST_PANIC:    rstMsg = "RST: panic";       break;
             case ESP_RST_TASK_WDT: rstMsg = "RST: task wdt";   break;
@@ -288,11 +292,11 @@ void setup() {
 
     BatteryStatus bat = readBatteryStatus();
 
-    Serial.printf("co2=%d temp=%.1f rh=%.1f bat=%d%% charging=%d\n",
-                  co2, temperature, humidity, bat.pct, bat.charging ? 1 : 0);
+    Serial.printf("co2=%d temp=%.1f rh=%.1f bat=%d%% charging=%d rst=%d\n",
+                  co2, temperature, humidity, bat.pct, bat.charging ? 1 : 0, (int)resetReason);
 
     updateDisplay(co2, temperature, humidity, bat.pct);
-    advertise(co2, temperature, humidity, bat.pct, bat.charging);
+    advertise(co2, temperature, humidity, bat.pct, bat.charging, (uint8_t)resetReason);
     Wire.end();
     if constexpr (DISPLAY_ENABLED) SPI.end();
     pinMode(SPI_MOSI, INPUT);  // GPIO10 = XIAO user LED (active low); float to reduce sleep current
