@@ -39,13 +39,13 @@ difference() {
     }
 
     translate([0,-30,0]) {
-        translate([10.5,0,5]) cylinder(r=0.5, h=15, $fn=10);
-        translate([-10.5,0,5]) cylinder(r=0.5, h=15, $fn=10);
+        translate([10.5,0,5]) cylinder(r=0.5, h=15, $fn=20);
+        translate([-10.5,0,5]) cylinder(r=0.5, h=15, $fn=20);
     }
 
-    translate([0,30,0]) {
-        translate([10.5,0,5]) cylinder(r=0.5, h=15, $fn=10);
-        translate([-10.5,0,5]) cylinder(r=0.5, h=15, $fn=10);
+    translate([0,30,5]) {
+        translate([10.5,0,5]) cylinder(r=0.5, h=15, $fn=20);
+        translate([-10.5,0,5]) cylinder(r=0.5, h=15, $fn=20);
     }
 
     for(y=[11:4:23]) {    
@@ -70,7 +70,7 @@ difference() {
             cylinder(r=1.3, h=10, $fn=16, center=true);
     }  
 
-    for(x=[-10:4:10]) {    
+    for(x=[-6:4:6]) {    
         translate([x,28,8]) rotate(90, [1,0,0]) 
             cylinder(r=1.3, h=10, $fn=16, center=true);
     }    
@@ -126,35 +126,35 @@ difference() {
     }
     
     translate([0,-30,0]) {
-        translate([10.5,0,-1]) {
-            cylinder(r=0.5, h=15, $fn=10);
-            cylinder(r=1.5, h=2, $fn=10);
+        translate([10.5,0,-0.1]) {
+            cylinder(r=0.75, h=15, $fn=20);
+            cylinder(r=1.5, h=1.5, $fn=20);
         }
-        translate([-10.5,0,-1]) {
-            cylinder(r=0.5, h=15, $fn=10);
-            cylinder(r=1.5, h=2, $fn=10);
+        translate([-10.5,0,-0.1]) {
+            cylinder(r=0.75, h=15, $fn=20);
+            cylinder(r=1.5, h=1.5, $fn=20);
         }
     }
 
     translate([0,30,0]) {
-        translate([10.5,0,-1]) {
-            cylinder(r=0.5, h=15, $fn=10);
-            cylinder(r=1.5, h=2, $fn=10);
+        translate([10.5,0,-0.1]) {
+            cylinder(r=0.75, h=15, $fn=20);
+            cylinder(r=1.5, h=1.5, $fn=20);
         }
-        translate([-10.5,0,-1]) {
-            cylinder(r=0.5, h=15, $fn=10);
-            cylinder(r=1.5, h=2, $fn=10);
+        translate([-10.5,0,-0.1]) {
+            cylinder(r=0.75, h=15, $fn=20);
+            cylinder(r=1.5, h=1.5, $fn=20);
         }
     }
     
-    for(x=[-8:4:8]) for(y=[12:6:28]) {    
-        translate([x,y,0]) 
-            cylinder(r=1.3, h=10, $fn=16, center=true);
-    }  
-
-    for(x=[-6:4:6]) for(y=[9:6:28]) {    
-        translate([x,y,0]) 
-            cylinder(r=1.3, h=10, $fn=16, center=true);
+    for(x=[-10:4:10]) {    
+        translate([x,8,0]) hull() {
+            cylinder(r=1, h=3, center=true, $fn=20);
+            translate([0,18,0]) cylinder(r=1, h=3, center=true, $fn=20);
+        }
+        
+        /*translate([x,18,0]) 
+            cube([2, 18, 3], $fn=16, center=true);*/
     }  
 
     hull() {
