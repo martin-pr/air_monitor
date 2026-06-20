@@ -16,6 +16,10 @@ import java.util.List;
 public class HistoryStore {
     private static final String FILE          = "history.json";
     private static final long   RETENTION_MS  = 24 * 60 * 60 * 1000L;
+    // BLE advertises the same beacon ~50 times per wake cycle and the system
+    // delivers many of those — collapse repeats inside this window into a
+    // single history entry. Safe so long as the wake interval is > this.
+    private static final long   DEDUPE_WINDOW_MS = 30 * 1000L;
 
     public static final class Entry {
         public final long    ts;
@@ -40,6 +44,11 @@ public class HistoryStore {
     public static void append(Context context, JSONObject reading) {
         List<Entry> entries = read(context);
         long now = System.currentTimeMillis();
+
+        if (!entries.isEmpty() && now - entries.get(entries.size() - 1).ts < DEDUPE_WINDOW_MS) {
+            return;
+        }
+
         entries.add(new Entry(
             now,
             reading.optInt("co2", 0),
