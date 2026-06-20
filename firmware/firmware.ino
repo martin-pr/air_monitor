@@ -45,7 +45,7 @@ constexpr size_t  BEACON_PAYLOAD_LEN = 8;  // bytes after company ID
 
 constexpr uint32_t ADV_DURATION_MS    = 5000;
 constexpr uint32_t SCD41_MEASURE_MS   = 5000;   // single-shot measurement time per datasheet
-constexpr uint64_t SLEEP_DURATION_US  = 1ULL * 60 * 1000000;  // 1-minute cycle
+constexpr uint64_t SLEEP_DURATION_US  = 5ULL * 60 * 1000000;  // 5-minute cycle
 
 // ePaper pins (XIAO ESP32-C3)
 constexpr int EPD_CS   = 5;   // D3
