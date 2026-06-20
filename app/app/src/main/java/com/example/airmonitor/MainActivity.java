@@ -56,8 +56,9 @@ public class MainActivity extends Activity {
     private static final int TAB_COLOR_UNSELECTED = 0x99000000;
 
     private static final int COLOR_CO2      = 0xFFD32F2F;  // red
-    private static final int COLOR_TEMP     = 0xFF7B1FA2;  // purple
+    private static final int COLOR_TEMP     = 0xFF66BB6A;  // light green
     private static final int COLOR_HUMIDITY = 0xFF1976D2;  // blue
+    private static final int COLOR_BATTERY  = 0xFFFBC02D;  // yellow
 
     @Override
     protected void onCreate(Bundle state) {
@@ -97,6 +98,7 @@ public class MainActivity extends Activity {
         ((TextView)findViewById(R.id.legend_co2)).setTextColor(COLOR_CO2);
         ((TextView)findViewById(R.id.legend_temp)).setTextColor(COLOR_TEMP);
         ((TextView)findViewById(R.id.legend_humidity)).setTextColor(COLOR_HUMIDITY);
+        ((TextView)findViewById(R.id.legend_battery)).setTextColor(COLOR_BATTERY);
 
         setupTabs();
 
@@ -281,17 +283,23 @@ public class MainActivity extends Activity {
         List<HistoryGraphView.Point> co2Points      = new ArrayList<>();
         List<HistoryGraphView.Point> tempPoints     = new ArrayList<>();
         List<HistoryGraphView.Point> humidityPoints = new ArrayList<>();
+        List<HistoryGraphView.Point> batteryPoints  = new ArrayList<>();
         for (HistoryStore.Entry e : entries) {
             if (e.ts < startTs || e.ts >= endTs) continue;
             co2Points.add(new HistoryGraphView.Point(e.ts, e.co2));
             tempPoints.add(new HistoryGraphView.Point(e.ts, e.temp + tempOffset));
             humidityPoints.add(new HistoryGraphView.Point(e.ts, e.humidity));
+            // Skip charging cycles (battery == -1) — they have no meaningful %.
+            if (e.battery >= 0) {
+                batteryPoints.add(new HistoryGraphView.Point(e.ts, e.battery));
+            }
         }
 
         List<HistoryGraphView.Series> series = new ArrayList<>();
         series.add(new HistoryGraphView.Series(co2Points,      0, 2000, COLOR_CO2));
         series.add(new HistoryGraphView.Series(tempPoints,     0,   40, COLOR_TEMP));
         series.add(new HistoryGraphView.Series(humidityPoints, 0,  100, COLOR_HUMIDITY));
+        series.add(new HistoryGraphView.Series(batteryPoints,  0,  100, COLOR_BATTERY));
 
         graph.setRange(startTs, endTs);
         graph.setSeries(series);

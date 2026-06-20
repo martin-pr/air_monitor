@@ -104,7 +104,13 @@ public class HistoryGraphView extends View {
         return true;
     }
 
-    private float graphLeft()  { return dp(46); }
+    private static final float LABEL_COLS_START = 8f;
+    private static final float LABEL_COL_WIDTH  = 13f;
+
+    private float graphLeft() {
+        int n = Math.max(1, seriesList.size());
+        return dp(LABEL_COLS_START + n * LABEL_COL_WIDTH + 2f);
+    }
     private float graphRight() { return getWidth() - dp(4); }
 
     private class ScaleListener extends ScaleGestureDetector.SimpleOnScaleGestureListener {
@@ -195,8 +201,8 @@ public class HistoryGraphView extends View {
         canvas.drawLine(left, bottom, right, bottom, gridPaint);
 
         // 4 horizontal gridlines + rotated value annotations
-        float colWidth  = dp(13);
-        float colsStart = dp(8);
+        float colWidth  = dp(LABEL_COL_WIDTH);
+        float colsStart = dp(LABEL_COLS_START);
         int savedColor = labelPaint.getColor();
         for (float fraction : GRID_FRACTIONS) {
             float y = bottom - (bottom - top) * fraction;

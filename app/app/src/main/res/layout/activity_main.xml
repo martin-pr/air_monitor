@@ -178,6 +178,15 @@
                     android:gravity="center"
                     android:text="@string/legend_humidity"
                     android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/legend_battery"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:text="@string/legend_battery"
+                    android:textSize="12sp" />
             </LinearLayout>
         </LinearLayout>
 

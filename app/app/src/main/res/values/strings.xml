@@ -26,6 +26,7 @@
     <string name="legend_co2">● CO2 (ppm)</string>
     <string name="legend_temp">● Temp (°C)</string>
     <string name="legend_humidity">● Humidity (%)</string>
+    <string name="legend_battery">● Battery (%)</string>
 
     <string name="tab_graph_icon">📊</string>
     <string name="tab_graph_label">Graph</string>
