@@ -46,9 +46,17 @@ public class HistoryStore {
     public static void append(Context context, JSONObject reading) {
         List<Entry> entries = read(context);
         long now = System.currentTimeMillis();
+        String mac = reading.optString("mac", null);
 
-        if (!entries.isEmpty() && now - entries.get(entries.size() - 1).ts < DEDUPE_WINDOW_MS) {
-            return;
+        // Per-MAC dedupe — drop only if the most recent entry from THIS same
+        // device was within DEDUPE_WINDOW_MS. Walking backward from the tail
+        // is fine because entries are time-ordered and the window is short
+        // (so we stop after a handful of iterations).
+        for (int i = entries.size() - 1; i >= 0; i--) {
+            Entry e = entries.get(i);
+            if (e.ts < now - DEDUPE_WINDOW_MS) break;
+            boolean sameMac = (mac == null) ? (e.mac == null) : mac.equals(e.mac);
+            if (sameMac) return;
         }
 
         entries.add(new Entry(
@@ -59,7 +67,7 @@ public class HistoryStore {
             reading.optInt("battery", -1),
             reading.optBoolean("charging", false),
             reading.optInt("status", 8),  // 8 = ESP_RST_DEEPSLEEP (normal)
-            reading.optString("mac", null)
+            mac
         ));
 
         long cutoff = now - RETENTION_MS;

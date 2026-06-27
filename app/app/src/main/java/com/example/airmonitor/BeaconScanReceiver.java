@@ -89,21 +89,22 @@ public class BeaconScanReceiver extends BroadcastReceiver {
             return;
         }
 
-        // A batch can contain results from multiple "Air Monitor" devices (e.g.
-        // old + new firmware in range simultaneously) — and from older firmware
-        // whose payload doesn't parse against the current layout. Walk the batch
-        // and keep the most recent successfully-parsed result; if any parse
-        // succeeds, that one wins.
-        JSONObject bestJson = null;
+        // A batch can contain results from multiple "Air Monitor" devices in
+        // range simultaneously. Log every valid beacon to history individually
+        // (HistoryStore dedupes per-MAC, so each device gets its own entries),
+        // but only refresh the widget/notification once at the end with the
+        // most recent reading from the batch.
+        JSONObject lastJson = null;
         for (ScanResult result : results) {
             JSONObject json = parseBeacon(result);
             if (json != null) {
-                bestJson = json;
+                WidgetState.appendHistory(context, json);
+                lastJson = json;
             }
         }
 
-        if (bestJson != null) {
-            WidgetState.saveReading(context, bestJson);
+        if (lastJson != null) {
+            WidgetState.saveReading(context, lastJson);
         }
     }
 

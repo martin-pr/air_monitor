@@ -34,6 +34,13 @@ public class WidgetState {
         syncNotification(context);
     }
 
+    // Append to history without touching widget/notification state. Used when
+    // processing a batch with multiple beacons: each one is logged separately,
+    // but only the chosen "current" one drives the widget/notification.
+    public static void appendHistory(Context context, JSONObject json) {
+        HistoryStore.append(context, json);
+    }
+
     public static void syncNotification(Context context) {
         if (!AppSettings.isNotificationsEnabled(context)) {
             ReadingNotification.cancel(context);
