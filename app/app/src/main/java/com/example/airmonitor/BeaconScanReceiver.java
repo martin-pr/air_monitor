@@ -89,22 +89,33 @@ public class BeaconScanReceiver extends BroadcastReceiver {
             return;
         }
 
-        // The system may deliver multiple matched results in one batch; take the
-        // last one (most recent — they're delivered in order).
-        ScanResult latest = results.get(results.size() - 1);
-        parseBeacon(context, latest);
+        // A batch can contain results from multiple "Air Monitor" devices (e.g.
+        // old + new firmware in range simultaneously) — and from older firmware
+        // whose payload doesn't parse against the current layout. Walk the batch
+        // and keep the most recent successfully-parsed result; if any parse
+        // succeeds, that one wins.
+        JSONObject bestJson = null;
+        for (ScanResult result : results) {
+            JSONObject json = parseBeacon(result);
+            if (json != null) {
+                bestJson = json;
+            }
+        }
+
+        if (bestJson != null) {
+            WidgetState.saveReading(context, bestJson);
+        }
     }
 
-    private static void parseBeacon(Context context, ScanResult result) {
+    private static JSONObject parseBeacon(ScanResult result) {
         ScanRecord record = result.getScanRecord();
         byte[] payload = record == null ? null : record.getManufacturerSpecificData(BEACON_COMPANY_ID);
         if (payload == null || payload.length < BEACON_PAYLOAD_LEN) {
-            return;
+            return null;
         }
 
         if ((payload[0] & 0xFF) != BEACON_VERSION) {
-            WidgetState.saveStatus(context, "unsupported beacon");
-            return;
+            return null;
         }
 
         try {
@@ -124,8 +135,10 @@ public class BeaconScanReceiver extends BroadcastReceiver {
             json.put("humidity", humidity);
             if (!charging) json.put("battery", batteryRaw);
             json.put("charging", charging);
-            WidgetState.saveReading(context, json);
-        } catch (Exception ignored) {}
+            return json;
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private static int u16le(byte[] data, int offset) {
