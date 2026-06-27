@@ -283,6 +283,17 @@
                     android:textSize="11sp"
                     android:letterSpacing="0.1"
                     android:alpha="0.6" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1.5"
+                    android:gravity="end"
+                    android:text="@string/log_col_device"
+                    android:textAllCaps="true"
+                    android:textSize="11sp"
+                    android:letterSpacing="0.1"
+                    android:alpha="0.6" />
             </LinearLayout>
 
             <View

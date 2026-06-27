@@ -135,6 +135,9 @@ public class BeaconScanReceiver extends BroadcastReceiver {
             json.put("humidity", humidity);
             if (!charging) json.put("battery", batteryRaw);
             json.put("charging", charging);
+            if (result.getDevice() != null) {
+                json.put("mac", result.getDevice().getAddress());
+            }
             return json;
         } catch (Exception ignored) {
             return null;

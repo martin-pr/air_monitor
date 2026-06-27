@@ -29,8 +29,9 @@ public class HistoryStore {
         public final int     battery;   // 0–100, or -1 when charging / unknown
         public final boolean charging;
         public final int     status;    // esp_reset_reason_t (8 = deep sleep wake = normal)
+        public final String  mac;       // beacon source MAC, or null for older entries
 
-        public Entry(long ts, int co2, double temp, double humidity, int battery, boolean charging, int status) {
+        public Entry(long ts, int co2, double temp, double humidity, int battery, boolean charging, int status, String mac) {
             this.ts = ts;
             this.co2 = co2;
             this.temp = temp;
@@ -38,6 +39,7 @@ public class HistoryStore {
             this.battery = battery;
             this.charging = charging;
             this.status = status;
+            this.mac = mac;
         }
     }
 
@@ -56,7 +58,8 @@ public class HistoryStore {
             reading.optDouble("humidity", 0.0),
             reading.optInt("battery", -1),
             reading.optBoolean("charging", false),
-            reading.optInt("status", 8)  // 8 = ESP_RST_DEEPSLEEP (normal)
+            reading.optInt("status", 8),  // 8 = ESP_RST_DEEPSLEEP (normal)
+            reading.optString("mac", null)
         ));
 
         long cutoff = now - RETENTION_MS;
@@ -87,7 +90,8 @@ public class HistoryStore {
                     obj.getDouble("humidity"),
                     obj.optInt("battery", -1),
                     obj.optBoolean("charging", false),
-                    obj.optInt("status", 8)
+                    obj.optInt("status", 8),
+                    obj.optString("mac", null)
                 ));
             }
             return entries;
@@ -109,6 +113,7 @@ public class HistoryStore {
                 obj.put("battery", e.battery);
                 obj.put("charging", e.charging);
                 obj.put("status", e.status);
+                if (e.mac != null) obj.put("mac", e.mac);
                 arr.put(obj);
             }
             try (FileWriter writer = new FileWriter(file)) {

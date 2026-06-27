@@ -41,4 +41,5 @@
     <string name="log_col_humidity">RH</string>
     <string name="log_col_battery">Bat</string>
     <string name="log_col_status">Rst</string>
+    <string name="log_col_device">Dev</string>
 </resources>

@@ -58,4 +58,13 @@
         android:gravity="end"
         android:fontFamily="monospace"
         android:textSize="12sp" />
+
+    <TextView
+        android:id="@+id/col_device"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1.5"
+        android:gravity="end"
+        android:fontFamily="monospace"
+        android:textSize="12sp" />
 </LinearLayout>

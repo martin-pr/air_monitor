@@ -48,8 +48,17 @@ public class LogAdapter extends BaseAdapter {
             e.charging ? "⚡" : (e.battery < 0 ? "--" : String.valueOf(e.battery))
         );
         ((TextView)convertView.findViewById(R.id.col_status)).setText(statusCode(e.status));
+        ((TextView)convertView.findViewById(R.id.col_device)).setText(deviceTag(e.mac));
 
         return convertView;
+    }
+
+    // Last 2 bytes of the MAC (e.g. "82FA"). Compact enough for a narrow column,
+    // unique enough to distinguish a handful of devices in the household.
+    private static String deviceTag(String mac) {
+        if (mac == null || mac.length() < 5) return "";
+        String tail = mac.substring(mac.length() - 5);  // last "xx:xx"
+        return tail.replace(":", "").toUpperCase(Locale.US);
     }
 
     private static String statusCode(int status) {
