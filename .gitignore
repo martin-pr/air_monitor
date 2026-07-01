@@ -71,3 +71,17 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# Gradle / Android Studio
+.gradle/
+.idea/
+*.iml
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Android signing — never commit keystores or the properties file
+# that carries their passwords.
+*.jks
+keystore.properties

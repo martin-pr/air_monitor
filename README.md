@@ -63,18 +63,33 @@ Press Enter once after connecting — the USB-Serial-JTAG peripheral requires th
 
 The `app` directory contains an Android home-screen widget. It passively scans for BLE advertisements from the device and displays the latest sensor readings — no connection or pairing required.
 
-Build the debug APK:
+The build uses Gradle with the Android Gradle Plugin. The wrapper is checked in, so no system Gradle install is needed — just JDK 17 and the Android SDK (build-tools 34, platform android-34). Point `local.properties` at the SDK on first checkout:
 
 ```bash
 cd app
-cmake -S . -B build
-cmake --build build
+echo "sdk.dir=$HOME/Android/Sdk" > local.properties
 ```
 
-Install it on a connected Android device:
+Build the debug APK:
 
 ```bash
-adb install -r build/AirMonitorWidget-debug.apk
+./gradlew :app:assembleDebug
+# → app/build/outputs/apk/debug/app-debug.apk
+```
+
+Build the release AAB (for Google Play upload):
+
+```bash
+./gradlew :app:bundleRelease
+# → app/build/outputs/bundle/release/app-release.aab
+```
+
+The release build is signed with the debug keystore for convenience. Replace `signingConfigs.getByName("debug")` in `app/build.gradle.kts` with a real upload keystore before submitting to Play.
+
+Install a debug build on a connected Android device:
+
+```bash
+adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
 After installing, add the **Air Monitor** widget from the Android launcher widget picker.
