@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 project(AirMonitorWidget LANGUAGES NONE)
 
-set(ANDROID_PACKAGE "com.example.airmonitor" CACHE STRING "Android application id")
+set(ANDROID_PACKAGE "com.air_monitor" CACHE STRING "Android application id")
 set(ANDROID_MIN_SDK 23 CACHE STRING "Minimum Android SDK")
 set(ANDROID_TARGET_SDK 34 CACHE STRING "Target Android SDK")
 

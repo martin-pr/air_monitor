@@ -139,7 +139,7 @@
                 android:textAllCaps="true"
                 android:letterSpacing="0.1" />
 
-            <com.example.airmonitor.HistoryGraphView
+            <com.air_monitor.HistoryGraphView
                 android:id="@+id/graph"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"

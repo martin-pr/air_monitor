@@ -1,4 +1,4 @@
-package com.example.airmonitor;
+package com.air_monitor;
 
 import android.Manifest;
 import android.app.PendingIntent;
@@ -21,7 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class BeaconScanReceiver extends BroadcastReceiver {
-    private static final String ACTION_SCAN_RESULT = "com.example.airmonitor.BEACON_SCAN";
+    private static final String ACTION_SCAN_RESULT = "com.air_monitor.BEACON_SCAN";
 
     private static final int BEACON_COMPANY_ID  = 0x4D41;  // 'AM'
     private static final int BEACON_VERSION     = 1;

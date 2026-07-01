@@ -1,4 +1,4 @@
-package com.example.airmonitor;
+package com.air_monitor;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
