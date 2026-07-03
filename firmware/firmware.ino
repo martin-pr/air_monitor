@@ -2,8 +2,6 @@
 #include <esp_system.h>
 #include <esp_sleep.h>
 
-#include <Wire.h>
-#include <SensirionI2cScd4x.h>
 
 #include <BLEDevice.h>
 #include <BLEAdvertising.h>
@@ -13,9 +11,8 @@
 #include <Fonts/FreeSans12pt7b.h>
 #include <Fonts/FreeSansBold24pt7b.h>
 
-#include <memory>
-
 #include "battery.h"
+#include "sensor.h"
 
 // Beacon advertisement — manufacturer-specific data (10 bytes, little-endian):
 //   [0-1]  company ID: 0x41 0x4D ('AM')
@@ -48,7 +45,6 @@ constexpr uint8_t BAT_CHARGING_SENTINEL = 0xFF;
 constexpr size_t  BEACON_PAYLOAD_LEN = 8;  // bytes after company ID
 
 constexpr uint32_t ADV_DURATION_MS    = 5000;
-constexpr uint32_t SCD41_MEASURE_MS   = 5000;   // single-shot measurement time per datasheet
 constexpr uint64_t SLEEP_DURATION_US  = 5ULL * 60 * 1000000;  // 5-minute cycle
 
 // ePaper pins (XIAO ESP32-C3)
@@ -70,11 +66,6 @@ constexpr int STATUS_FIRST_Y = 20;
 constexpr int STATUS_LINE_STEP = 29;        // FreeSans12pt7b yAdvance
 constexpr uint32_t STATUS_STEP_DELAY_MS = 500;  // required to avoid power spikes
 constexpr size_t MAX_STATUS_LINES = 8;
-
-// Battery ADC: D0/GPIO2, tapped through a 220k+220k divider (ratio 1:2).
-std::unique_ptr<Battery> battery;
-
-SensirionI2cScd4x scd4x;
 
 GxEPD2_BW<GxEPD2_154_D67, GxEPD2_154_D67::HEIGHT> display(
     GxEPD2_154_D67(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY)
@@ -210,15 +201,11 @@ void setup() {
     setCpuFrequencyMhz(80);
     Serial.begin(115200);
 
-    battery = std::make_unique<Battery>(A0);
     if constexpr (DISPLAY_ENABLED) {
         SPI.begin(SPI_SCK, /*MISO=*/-1, SPI_MOSI, EPD_CS);
         display.init(115200);
         display.setRotation(1);
     }
-
-    Wire.begin();
-    scd4x.begin(Wire, SCD41_I2C_ADDR_62);
 
     esp_reset_reason_t resetReason = esp_reset_reason();
     bool firstBoot = (resetReason != ESP_RST_DEEPSLEEP);
@@ -245,31 +232,32 @@ void setup() {
         showStatus(rstMsg);
         showStatus("Display OK");
         showStatus("Sensor init...");
-        scd4x.stopPeriodicMeasurement();
-        delay(500);
-        showStatus("Measuring...");
-    } else {
-        scd4x.wakeUp();
-        delay(30);  // SCD41 requires 30ms after wakeUp before issuing commands
     }
 
-    scd4x.measureSingleShot();
-    esp_sleep_enable_timer_wakeup(SCD41_MEASURE_MS * 1000ULL);
-    esp_light_sleep_start();
+    // Sensor is scoped to the measurement path so its destructor (which
+    // releases the I2C bus) runs before we prep for deep sleep.
+    Sensor::Reading reading;
+    {
+        Sensor sensor(firstBoot);
+        if (firstBoot) showStatus("Measuring...");
 
-    uint16_t co2 = 0;
-    float temperature = 0.0f, humidity = 0.0f;
-    scd4x.readMeasurement(co2, temperature, humidity);
-    scd4x.powerDown();
+        sensor.startMeasurement();
+        esp_sleep_enable_timer_wakeup(Sensor::MEASURE_MS * 1000ULL);
+        esp_light_sleep_start();
 
-    Battery::Status bat = battery->read();
+        reading = sensor.read();
+    }
+
+    // Battery ADC: D0/GPIO2, tapped through a 220k+220k divider (ratio 1:2).
+    Battery battery(A0);
+    Battery::Status bat = battery.read();
 
     Serial.printf("co2=%d temp=%.1f rh=%.1f bat=%d%% charging=%d rst=%d\n",
-                  co2, temperature, humidity, bat.pct, bat.charging ? 1 : 0, (int)resetReason);
+                  reading.co2, reading.temperature, reading.humidity,
+                  bat.pct, bat.charging ? 1 : 0, (int)resetReason);
 
-    updateDisplay(co2, temperature, humidity, bat.pct);
-    advertise(co2, temperature, humidity, bat.pct, bat.charging, (uint8_t)resetReason);
-    Wire.end();
+    updateDisplay(reading.co2, reading.temperature, reading.humidity, bat.pct);
+    advertise(reading.co2, reading.temperature, reading.humidity, bat.pct, bat.charging, (uint8_t)resetReason);
     if constexpr (DISPLAY_ENABLED) SPI.end();
     pinMode(SPI_MOSI, INPUT);  // GPIO10 = XIAO user LED (active low); float to reduce sleep current
     esp_deep_sleep(SLEEP_DURATION_US);

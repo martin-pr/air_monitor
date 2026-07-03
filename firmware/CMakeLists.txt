@@ -16,7 +16,9 @@ add_custom_command(
             --fqbn ${FQBN}
             --build-path ${SKETCH_BUILD}
             ${SKETCH_DIR}
-    DEPENDS ${SKETCH_DIR}/firmware.ino ${SKETCH_DIR}/battery.h ${SKETCH_DIR}/battery.cpp
+    DEPENDS ${SKETCH_DIR}/firmware.ino
+            ${SKETCH_DIR}/battery.h ${SKETCH_DIR}/battery.cpp
+            ${SKETCH_DIR}/sensor.h  ${SKETCH_DIR}/sensor.cpp
     COMMENT "arduino-cli compile (${FQBN})"
     VERBATIM
 )
