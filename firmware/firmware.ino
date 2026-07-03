@@ -13,6 +13,10 @@
 #include <Fonts/FreeSans12pt7b.h>
 #include <Fonts/FreeSansBold24pt7b.h>
 
+#include <memory>
+
+#include "battery.h"
+
 // Beacon advertisement — manufacturer-specific data (10 bytes, little-endian):
 //   [0-1]  company ID: 0x41 0x4D ('AM')
 //   [2]    protocol version (BEACON_VERSION); bump when layout changes
@@ -67,40 +71,8 @@ constexpr int STATUS_LINE_STEP = 29;        // FreeSans12pt7b yAdvance
 constexpr uint32_t STATUS_STEP_DELAY_MS = 500;  // required to avoid power spikes
 constexpr size_t MAX_STATUS_LINES = 8;
 
-// Battery ADC
-constexpr int BAT_PIN = A0;  // D0/GPIO2; reads through 220k+220k divider (ratio 1:2)
-
-struct BatPoint { float voltage; uint8_t pct; };
-constexpr std::array<BatPoint, 4> BAT_CURVE = {{
-    {4.20f, 100},
-    {3.98f,  80},
-    {3.52f,  20},
-    {3.00f,   0},
-}};
-
-// Without a VBUS sense wire we infer charging from battery voltage. The on-board
-// charge IC holds Vbat near 4.20 V during the constant-voltage tail of a charge,
-// so anything above 4.10 V is "charging or topped off". False negatives during
-// the early/mid constant-current phase are unavoidable with this approach.
-constexpr float CHARGING_THRESHOLD_V = 4.10f;
-
-struct BatteryStatus { uint8_t pct; bool charging; };
-
-BatteryStatus readBatteryStatus() {
-    float vbat = analogReadMilliVolts(BAT_PIN) * 2.0f / 1000.0f;
-    bool charging = vbat > CHARGING_THRESHOLD_V;
-    if (vbat >= BAT_CURVE.front().voltage) return { 100, charging };
-    if (vbat <= BAT_CURVE.back().voltage)  return {   0, charging };
-    for (size_t i = 0; i < BAT_CURVE.size() - 1; i++) {
-        if (vbat >= BAT_CURVE[i + 1].voltage) {
-            float t = (vbat - BAT_CURVE[i + 1].voltage) /
-                      (BAT_CURVE[i].voltage - BAT_CURVE[i + 1].voltage);
-            uint8_t pct = (uint8_t)(BAT_CURVE[i + 1].pct + t * (BAT_CURVE[i].pct - BAT_CURVE[i + 1].pct));
-            return { pct, charging };
-        }
-    }
-    return { 0, charging };
-}
+// Battery ADC: D0/GPIO2, tapped through a 220k+220k divider (ratio 1:2).
+std::unique_ptr<Battery> battery;
 
 SensirionI2cScd4x scd4x;
 
@@ -237,8 +209,8 @@ void advertise(uint16_t co2, float temperature, float humidity, uint8_t batPct, 
 void setup() {
     setCpuFrequencyMhz(80);
     Serial.begin(115200);
-    analogSetAttenuation(ADC_11db);  // 0–3.9 V range; covers 1.5–2.1 V from the battery divider
 
+    battery = std::make_unique<Battery>(A0);
     if constexpr (DISPLAY_ENABLED) {
         SPI.begin(SPI_SCK, /*MISO=*/-1, SPI_MOSI, EPD_CS);
         display.init(115200);
@@ -290,7 +262,7 @@ void setup() {
     scd4x.readMeasurement(co2, temperature, humidity);
     scd4x.powerDown();
 
-    BatteryStatus bat = readBatteryStatus();
+    Battery::Status bat = battery->read();
 
     Serial.printf("co2=%d temp=%.1f rh=%.1f bat=%d%% charging=%d rst=%d\n",
                   co2, temperature, humidity, bat.pct, bat.charging ? 1 : 0, (int)resetReason);
