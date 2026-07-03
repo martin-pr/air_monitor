@@ -63,7 +63,7 @@ Press Enter once after connecting — the USB-Serial-JTAG peripheral requires th
 
 The `app` directory contains an Android home-screen widget. It passively scans for BLE advertisements from the device and displays the latest sensor readings — no connection or pairing required.
 
-The build uses Gradle with the Android Gradle Plugin. The wrapper is checked in, so no system Gradle install is needed — just JDK 17 and the Android SDK (build-tools 34, platform android-34). Point `local.properties` at the SDK on first checkout:
+The build uses Gradle with the Android Gradle Plugin. The wrapper is checked in, so no system Gradle install is needed — just JDK 17 and the Android SDK (build-tools 35, platform android-35). Point `local.properties` at the SDK on first checkout:
 
 ```bash
 cd app

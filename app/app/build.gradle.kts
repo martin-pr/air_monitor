@@ -17,13 +17,13 @@ val keystoreProperties = Properties().apply {
 
 android {
     namespace = "com.air_monitor"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.air_monitor"
         minSdk = 23
-        targetSdk = 34
-        versionCode = 1
+        targetSdk = 35
+        versionCode = 2
         versionName = "1.0"
     }
 
