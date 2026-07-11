@@ -16,6 +16,9 @@ constexpr bool DISPLAY_ENABLED = true;
 // Battery ADC pin: D0/GPIO2, tapped through a 220k+220k divider (ratio 1:2).
 constexpr int BAT_PIN = A0;
 
+// SCD41 I2C bus routing: D4/GPIO6 (SDA), D5/GPIO7 (SCL) — board defaults.
+constexpr Sensor::Config SENSOR_PINS { SDA, SCL };
+
 constexpr uint64_t SLEEP_DURATION_US = 5ULL * 60 * 1000000;  // 5-minute cycle
 
 namespace {
@@ -55,7 +58,7 @@ void setup() {
 
         Sensor::Reading reading;
         {
-            Sensor sensor(firstBoot);
+            Sensor sensor(firstBoot, SENSOR_PINS);
             if (firstBoot && display) display->showStatus("Measuring...");
 
             sensor.startMeasurement();

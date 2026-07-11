@@ -3,8 +3,8 @@
 #include <Arduino.h>
 #include <Wire.h>
 
-Sensor::Sensor(bool firstBoot) {
-    Wire.begin();
+Sensor::Sensor(bool firstBoot, const Config& config) {
+    Wire.begin(config.sdaPin, config.sclPin);
     _sensor.begin(Wire, SCD41_I2C_ADDR_62);
     if (firstBoot) {
         _sensor.stopPeriodicMeasurement();
