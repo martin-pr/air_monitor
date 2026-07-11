@@ -18,6 +18,22 @@ constexpr int BAT_PIN = A0;
 
 constexpr uint64_t SLEEP_DURATION_US = 5ULL * 60 * 1000000;  // 5-minute cycle
 
+namespace {
+
+const char* resetReasonMessage(esp_reset_reason_t reason) {
+    switch (reason) {
+        case ESP_RST_BROWNOUT: return "RST: brownout";
+        case ESP_RST_PANIC:    return "RST: panic";
+        case ESP_RST_TASK_WDT: return "RST: task wdt";
+        case ESP_RST_INT_WDT:  return "RST: int wdt";
+        case ESP_RST_WDT:      return "RST: rtc wdt";
+        case ESP_RST_SW:       return "RST: software";
+        default:               return "RST: poweron/pin";
+    }
+}
+
+}  // namespace
+
 void setup() {
     setCpuFrequencyMhz(80);
     Serial.begin(115200);
@@ -31,22 +47,10 @@ void setup() {
             display = std::make_unique<Display>(firstBoot);
         }
 
-        if (firstBoot) {
-            const char* rstMsg = "RST: poweron/pin";
-            switch (resetReason) {
-                case ESP_RST_BROWNOUT: rstMsg = "RST: brownout";   break;
-                case ESP_RST_PANIC:    rstMsg = "RST: panic";      break;
-                case ESP_RST_TASK_WDT: rstMsg = "RST: task wdt";   break;
-                case ESP_RST_INT_WDT:  rstMsg = "RST: int wdt";    break;
-                case ESP_RST_WDT:      rstMsg = "RST: rtc wdt";    break;
-                case ESP_RST_SW:       rstMsg = "RST: software";   break;
-                default:                                             break;
-            }
-            if (display) {
-                display->showStatus(rstMsg);
-                display->showStatus("Display OK");
-                display->showStatus("Sensor init...");
-            }
+        if (firstBoot && display) {
+            display->showStatus(resetReasonMessage(resetReason));
+            display->showStatus("Display OK");
+            display->showStatus("Sensor init...");
         }
 
         Sensor::Reading reading;
