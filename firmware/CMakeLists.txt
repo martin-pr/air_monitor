@@ -17,10 +17,11 @@ add_custom_command(
             --build-path ${SKETCH_BUILD}
             ${SKETCH_DIR}
     DEPENDS ${SKETCH_DIR}/firmware.ino
-            ${SKETCH_DIR}/battery.h ${SKETCH_DIR}/battery.cpp
-            ${SKETCH_DIR}/ble.h     ${SKETCH_DIR}/ble.cpp
-            ${SKETCH_DIR}/display.h ${SKETCH_DIR}/display.cpp
-            ${SKETCH_DIR}/sensor.h  ${SKETCH_DIR}/sensor.cpp
+            ${SKETCH_DIR}/battery.h      ${SKETCH_DIR}/battery.cpp
+            ${SKETCH_DIR}/ble.h          ${SKETCH_DIR}/ble.cpp
+            ${SKETCH_DIR}/display.h      ${SKETCH_DIR}/display.cpp
+            ${SKETCH_DIR}/reset_reason.h ${SKETCH_DIR}/reset_reason.cpp
+            ${SKETCH_DIR}/sensor.h       ${SKETCH_DIR}/sensor.cpp
     COMMENT "arduino-cli compile (${FQBN})"
     VERBATIM
 )

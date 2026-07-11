@@ -6,6 +6,7 @@
 #include "battery.h"
 #include "ble.h"
 #include "display.h"
+#include "reset_reason.h"
 #include "sensor.h"
 
 // Build-time toggle for the e-paper display. Set to false for sensor-only
@@ -30,22 +31,6 @@ constexpr Display::Config DISPLAY_PINS {
 };
 
 constexpr uint64_t SLEEP_DURATION_US = 5ULL * 60 * 1000000;  // 5-minute cycle
-
-namespace {
-
-const char* resetReasonMessage(esp_reset_reason_t reason) {
-    switch (reason) {
-        case ESP_RST_BROWNOUT: return "RST: brownout";
-        case ESP_RST_PANIC:    return "RST: panic";
-        case ESP_RST_TASK_WDT: return "RST: task wdt";
-        case ESP_RST_INT_WDT:  return "RST: int wdt";
-        case ESP_RST_WDT:      return "RST: rtc wdt";
-        case ESP_RST_SW:       return "RST: software";
-        default:               return "RST: poweron/pin";
-    }
-}
-
-}  // namespace
 
 void setup() {
     setCpuFrequencyMhz(80);
