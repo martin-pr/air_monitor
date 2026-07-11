@@ -20,7 +20,6 @@ Install the ESP32 board package and required libraries:
 ```bash
 arduino-cli core update-index
 arduino-cli core install esp32:esp32
-arduino-cli lib install ArduinoJson
 arduino-cli lib install "Sensirion I2C SCD4x"
 arduino-cli lib install GxEPD2
 arduino-cli lib install "Adafruit GFX Library"
@@ -84,7 +83,7 @@ Build the release AAB (for Google Play upload):
 # → app/build/outputs/bundle/release/app-release.aab
 ```
 
-The release build is signed with the debug keystore for convenience. Replace `signingConfigs.getByName("debug")` in `app/build.gradle.kts` with a real upload keystore before submitting to Play.
+Release signing is driven by `keystore.properties` at the repo root (git-ignored). When it's present and points at an upload keystore, release builds are signed with it; when it's absent, they fall back to the debug keystore — fine for local test builds but rejected by Play.
 
 Install a debug build on a connected Android device:
 
