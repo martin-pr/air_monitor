@@ -17,6 +17,7 @@ add_custom_command(
             --build-path ${SKETCH_BUILD}
             ${SKETCH_DIR}
     DEPENDS ${SKETCH_DIR}/firmware.ino
+            ${SKETCH_DIR}/app.h          ${SKETCH_DIR}/app.cpp
             ${SKETCH_DIR}/battery.h      ${SKETCH_DIR}/battery.cpp
             ${SKETCH_DIR}/ble.h          ${SKETCH_DIR}/ble.cpp
             ${SKETCH_DIR}/display.h      ${SKETCH_DIR}/display.cpp
