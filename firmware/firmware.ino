@@ -19,6 +19,16 @@ constexpr int BAT_PIN = A0;
 // SCD41 I2C bus routing: D4/GPIO6 (SDA), D5/GPIO7 (SCL) — board defaults.
 constexpr Sensor::Config SENSOR_PINS { SDA, SCL };
 
+// SSD1681 e-paper + its SPI bus.
+constexpr Display::Config DISPLAY_PINS {
+    .cs   = D3,
+    .dc   = D2,
+    .rst  = D1,
+    .busy = D6,
+    .sck  = D8,
+    .mosi = D10,
+};
+
 constexpr uint64_t SLEEP_DURATION_US = 5ULL * 60 * 1000000;  // 5-minute cycle
 
 namespace {
@@ -47,7 +57,7 @@ void setup() {
     {
         std::unique_ptr<Display> display;
         if constexpr (DISPLAY_ENABLED) {
-            display = std::make_unique<Display>(firstBoot);
+            display = std::make_unique<Display>(firstBoot, DISPLAY_PINS);
         }
 
         if (firstBoot && display) {
