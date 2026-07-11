@@ -6,36 +6,80 @@ set(PORT "/dev/ttyACM0" CACHE STRING "Upload port")
 
 find_program(ARDUINO_CLI arduino-cli REQUIRED)
 
-set(SKETCH_DIR   "${CMAKE_CURRENT_SOURCE_DIR}")
-set(SKETCH_BUILD "${CMAKE_CURRENT_BINARY_DIR}/sketch")
-set(SKETCH_BIN   "${SKETCH_BUILD}/firmware.ino.bin")
+# Shared Arduino library. Both variants pull it in via --library.
+set(COMMON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/common")
+set(COMMON_SOURCES
+    ${COMMON_DIR}/library.properties
+    ${COMMON_DIR}/src/battery.h       ${COMMON_DIR}/src/battery.cpp
+    ${COMMON_DIR}/src/ble.h           ${COMMON_DIR}/src/ble.cpp
+    ${COMMON_DIR}/src/reset_reason.h  ${COMMON_DIR}/src/reset_reason.cpp
+    ${COMMON_DIR}/src/sensor.h        ${COMMON_DIR}/src/sensor.cpp
+)
+
+# ---- display variant ----
+set(DISPLAY_DIR   "${CMAKE_CURRENT_SOURCE_DIR}/display")
+set(DISPLAY_BUILD "${CMAKE_CURRENT_BINARY_DIR}/display")
+set(DISPLAY_BIN   "${DISPLAY_BUILD}/display.ino.bin")
 
 add_custom_command(
-    OUTPUT ${SKETCH_BIN}
+    OUTPUT ${DISPLAY_BIN}
     COMMAND ${ARDUINO_CLI} compile
             --fqbn ${FQBN}
-            --build-path ${SKETCH_BUILD}
-            ${SKETCH_DIR}
-    DEPENDS ${SKETCH_DIR}/firmware.ino
-            ${SKETCH_DIR}/app.h          ${SKETCH_DIR}/app.cpp
-            ${SKETCH_DIR}/battery.h      ${SKETCH_DIR}/battery.cpp
-            ${SKETCH_DIR}/ble.h          ${SKETCH_DIR}/ble.cpp
-            ${SKETCH_DIR}/display.h      ${SKETCH_DIR}/display.cpp
-            ${SKETCH_DIR}/reset_reason.h ${SKETCH_DIR}/reset_reason.cpp
-            ${SKETCH_DIR}/sensor.h       ${SKETCH_DIR}/sensor.cpp
-    COMMENT "arduino-cli compile (${FQBN})"
+            --library ${COMMON_DIR}
+            --build-path ${DISPLAY_BUILD}
+            ${DISPLAY_DIR}
+    DEPENDS ${DISPLAY_DIR}/display.ino
+            ${DISPLAY_DIR}/app.h     ${DISPLAY_DIR}/app.cpp
+            ${DISPLAY_DIR}/display.h ${DISPLAY_DIR}/display.cpp
+            ${COMMON_SOURCES}
+    COMMENT "arduino-cli compile display (${FQBN})"
     VERBATIM
 )
 
-add_custom_target(build ALL DEPENDS ${SKETCH_BIN})
+add_custom_target(build_display DEPENDS ${DISPLAY_BIN})
 
-add_custom_target(flash
+add_custom_target(flash_display
     COMMAND ${ARDUINO_CLI} upload
             --fqbn ${FQBN}
             --port ${PORT}
-            --input-dir ${SKETCH_BUILD}
-            ${SKETCH_DIR}
-    DEPENDS build
-    COMMENT "arduino-cli upload to ${PORT}"
+            --input-dir ${DISPLAY_BUILD}
+            ${DISPLAY_DIR}
+    DEPENDS build_display
+    COMMENT "arduino-cli upload display to ${PORT}"
     VERBATIM
 )
+
+# ---- led variant ----
+set(LED_DIR   "${CMAKE_CURRENT_SOURCE_DIR}/led")
+set(LED_BUILD "${CMAKE_CURRENT_BINARY_DIR}/led")
+set(LED_BIN   "${LED_BUILD}/led.ino.bin")
+
+add_custom_command(
+    OUTPUT ${LED_BIN}
+    COMMAND ${ARDUINO_CLI} compile
+            --fqbn ${FQBN}
+            --library ${COMMON_DIR}
+            --build-path ${LED_BUILD}
+            ${LED_DIR}
+    DEPENDS ${LED_DIR}/led.ino
+            ${LED_DIR}/app.h ${LED_DIR}/app.cpp
+            ${COMMON_SOURCES}
+    COMMENT "arduino-cli compile led (${FQBN})"
+    VERBATIM
+)
+
+add_custom_target(build_led DEPENDS ${LED_BIN})
+
+add_custom_target(flash_led
+    COMMAND ${ARDUINO_CLI} upload
+            --fqbn ${FQBN}
+            --port ${PORT}
+            --input-dir ${LED_BUILD}
+            ${LED_DIR}
+    DEPENDS build_led
+    COMMENT "arduino-cli upload led to ${PORT}"
+    VERBATIM
+)
+
+# Default target: build both variants.
+add_custom_target(build ALL DEPENDS ${DISPLAY_BIN} ${LED_BIN})

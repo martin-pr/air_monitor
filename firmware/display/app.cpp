@@ -1,20 +1,14 @@
 #include "app.h"
 
-#include <memory>
-
 #include <esp_system.h>
 #include <esp_sleep.h>
 
-#include "battery.h"
-#include "ble.h"
-#include "display.h"
-#include "reset_reason.h"
-#include "sensor.h"
+#include <battery.h>
+#include <ble.h>
+#include <reset_reason.h>
+#include <sensor.h>
 
-// Build-time toggle for the e-paper display. Set to false for sensor-only
-// builds (no display wired). When false, no Display is ever constructed
-// and every display use is elided at compile time.
-constexpr bool DISPLAY_ENABLED = true;
+#include "display.h"
 
 // Battery ADC pin: D0/GPIO2, tapped through a 220k+220k divider (ratio 1:2).
 constexpr int BAT_PIN = A0;
@@ -42,21 +36,18 @@ void app::setup() {
     bool firstBoot = (resetReason != ESP_RST_DEEPSLEEP);
 
     {
-        std::unique_ptr<Display> display;
-        if constexpr (DISPLAY_ENABLED) {
-            display = std::make_unique<Display>(firstBoot, DISPLAY_PINS);
-        }
+        Display display(firstBoot, DISPLAY_PINS);
 
-        if (firstBoot && display) {
-            display->showStatus(resetReasonMessage(resetReason));
-            display->showStatus("Display OK");
-            display->showStatus("Sensor init...");
+        if (firstBoot) {
+            display.showStatus(resetReasonMessage(resetReason));
+            display.showStatus("Display OK");
+            display.showStatus("Sensor init...");
         }
 
         Sensor::Reading reading;
         {
             Sensor sensor(firstBoot, SENSOR_PINS);
-            if (firstBoot && display) display->showStatus("Measuring...");
+            if (firstBoot) display.showStatus("Measuring...");
 
             sensor.startMeasurement();
             esp_sleep_enable_timer_wakeup(Sensor::MEASURE_MS * 1000ULL);
@@ -72,9 +63,7 @@ void app::setup() {
                       reading.co2, reading.temperature, reading.humidity,
                       bat.pct, bat.charging ? 1 : 0, (int)resetReason);
 
-        if (display) {
-            display->showReading(reading, bat);
-        }
+        display.showReading(reading, bat);
         Ble::advertise(reading, bat, resetReason);
     }  // ~Display() releases SPI and floats MOSI
 

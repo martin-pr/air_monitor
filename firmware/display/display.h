@@ -2,8 +2,8 @@
 
 #include <GxEPD2_BW.h>
 
-#include "battery.h"
-#include "sensor.h"
+#include <battery.h>
+#include <sensor.h>
 
 class Display {
 public:
