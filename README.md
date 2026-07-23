@@ -234,16 +234,16 @@ The display is driven by [GxEPD2](https://github.com/ZinggJM/GxEPD2) using the `
 
 A common-cathode 5050 RGB LED, one GPIO per channel, driven by ESP32-C3 LEDC PWM. Per-channel current-limiting resistors size the drive current so R / G / B contribute roughly equally at equal duty:
 
-| Channel | Series R | Current at full duty | Notes |
-|---|---|---|---|
-| Red   | 220 Ω | ~5.9 mA | V_f ≈ 2.0 V, plenty of headroom |
-| Green | 47 Ω  | ~6.4 mA | V_f ≈ 3.0 V, current sensitive to part-to-part V_f drift |
-| Blue  | 47 Ω  | ~6.4 mA | Same as green |
+| Channel | XIAO pin | Series R | Current at full duty | Notes |
+|---|---|---|---|---|
+| Red   | D6 | 220 Ω | ~5.9 mA | V_f ≈ 2.0 V, plenty of headroom |
+| Green | D3 | 47 Ω  | ~6.4 mA | V_f ≈ 3.0 V, current sensitive to part-to-part V_f drift |
+| Blue  | D2 | 47 Ω  | ~6.4 mA | Same as green |
 
 ```
-D2 ──[220 Ω]── R anode ──┐
-D3 ──[47 Ω]── G anode ──┼── common cathode ── GND
-D6 ──[47 Ω]── B anode ──┘
+D6 ──[220 Ω]── R anode ──┐
+D3 ──[47 Ω] ── G anode ──┼── common cathode ── GND
+D2 ──[47 Ω] ── B anode ──┘
 ```
 
 Firmware never drives at 100 % duty — LED is used for brief low-brightness status flashes. Average current is deep-sleep-noise level, so no need to worry about brownout on turn-on transients.
