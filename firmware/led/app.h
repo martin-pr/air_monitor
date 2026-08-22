@@ -2,8 +2,10 @@
 
 namespace app {
 
-// One boot cycle: bring up hardware, take a measurement, advertise, deep-sleep.
-// Does not return — deep_sleep resets the chip.
-[[noreturn]] void setup();
+// Called once at boot. Drives the RGB LED pins low so the LED starts dark.
+void setup();
+
+// Called repeatedly after setup(). Currently: 5 s dark, 0.5 s blue.
+void loop();
 
 }  // namespace app

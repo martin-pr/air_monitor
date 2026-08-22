@@ -11,7 +11,8 @@
 #include "display.h"
 
 // Battery ADC pin: D0/GPIO2, tapped through a 220k+220k divider (ratio 1:2).
-constexpr int BAT_PIN = A0;
+// No VBUS-sense wire on v1 — charging is inferred from Vbat.
+constexpr Battery::Config BAT_CONFIG { .batteryPin = A0 };
 
 // SCD41 I2C bus routing: D4/GPIO6 (SDA), D5/GPIO7 (SCL) — board defaults.
 constexpr Sensor::Config SENSOR_PINS { SDA, SCL };
@@ -56,7 +57,7 @@ void app::setup() {
             reading = sensor.read();
         }
 
-        Battery battery(BAT_PIN);
+        Battery battery(BAT_CONFIG);
         Battery::Status bat = battery.read();
 
         Serial.printf("co2=%d temp=%.1f rh=%.1f bat=%d%% charging=%d rst=%d\n",

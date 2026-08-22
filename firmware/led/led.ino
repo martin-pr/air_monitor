@@ -6,4 +6,6 @@ void setup() {
     app::setup();
 }
 
-void loop() {}
+void loop() {
+    app::loop();
+}
