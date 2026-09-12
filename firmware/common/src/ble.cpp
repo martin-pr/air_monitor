@@ -42,7 +42,16 @@ void Ble::advertise(const Sensor::Reading& reading,
     mfr[2 + BOFF_RH]       = (uint8_t)(reading.humidity);
     mfr[2 + BOFF_BAT]      = battery.charging ? BAT_CHARGING_SENTINEL : battery.pct;
 
-    BLEDevice::init("Air Monitor");
+    // Initialise the BLE stack once per power session. Re-initialising it every
+    // cycle (init → deinit → init) panics the Bluedroid stack. The LED variant
+    // hit this on its second advertise because it stays awake and advertises
+    // repeatedly; the display variant never did, since it deep-sleeps (a full
+    // reset) after each single advertise.
+    static bool initialized = false;
+    if (!initialized) {
+        BLEDevice::init("Air Monitor");
+        initialized = true;
+    }
     BLEAdvertising *adv = BLEDevice::getAdvertising();
     BLEAdvertisementData advData;
     // Build manufacturer-specific AD structure manually to handle binary data safely:
@@ -60,5 +69,6 @@ void Ble::advertise(const Sensor::Reading& reading,
     delay(ADV_DURATION_MS);
 
     adv->stop();
-    BLEDevice::deinit(true);
+    // Deliberately not calling BLEDevice::deinit() — the stack stays up for the
+    // next advertise. Deep-sleep (display variant) resets it anyway.
 }

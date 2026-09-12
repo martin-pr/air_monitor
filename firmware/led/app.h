@@ -2,10 +2,13 @@
 
 namespace app {
 
-// Called once at boot. Drives the RGB LED pins low so the LED starts dark.
+// One boot cycle: bring up hardware, measure, flash the CO2 colour, advertise.
+// On battery this then deep-sleeps and never returns; on USB it returns so
+// loop() can hold the idle state and re-run the cycle.
 void setup();
 
-// Called repeatedly after setup(). Currently: 5 s dark, 0.5 s blue.
+// USB-only cadence: holds the idle blue and re-runs the cycle every 5 min or
+// on a button press. Never reached on battery (setup() deep-sleeps instead).
 void loop();
 
 }  // namespace app
