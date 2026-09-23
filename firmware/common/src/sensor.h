@@ -31,8 +31,8 @@ public:
     Sensor(bool firstBoot, const Config& config);
     ~Sensor();
 
-    // Kicks off a measurement. Returns immediately; caller must wait
-    // MEASURE_MS before calling read().
+    // Runs a single-shot measurement. Blocks ~MEASURE_MS (the driver waits
+    // out the conversion internally), so read() can be called immediately after.
     void startMeasurement();
 
     Reading read();

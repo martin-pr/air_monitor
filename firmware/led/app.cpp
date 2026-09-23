@@ -56,14 +56,12 @@ Led::Color colorForCo2(uint16_t co2) {
 // body: measure the SCD41, read the battery, flash the CO2 colour, then
 // advertise the reading. Runs on both the battery and USB paths.
 void runCycle(esp_reset_reason_t resetReason, bool firstBoot) {
-    g_led->set(Led::OFF);  // dark during the measurement (LEDC pauses in light sleep)
+    g_led->set(Led::OFF);  // dark during the measurement
 
     Sensor::Reading reading;
     {
         Sensor sensor(firstBoot, SENSOR_PINS);
-        sensor.startMeasurement();
-        esp_sleep_enable_timer_wakeup(Sensor::MEASURE_MS * 1000ULL);
-        esp_light_sleep_start();
+        sensor.startMeasurement();  // blocks ~MEASURE_MS inside the driver
         reading = sensor.read();
     }  // ~Sensor() powers the SCD41 down (preserves ASC across cycles)
 
