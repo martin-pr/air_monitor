@@ -97,6 +97,13 @@ void runCycle(esp_reset_reason_t resetReason, bool firstBoot) {
 }  // namespace
 
 void app::setup() {
+    // Drive the LED pins low first thing: the blue channel (D7/GPIO20) glows
+    // faintly between reset and LED setup on a battery wake.
+    for (int pin : {LED_PINS.red, LED_PINS.green, LED_PINS.blue}) {
+        pinMode(pin, OUTPUT);
+        digitalWrite(pin, LOW);
+    }
+
     setCpuFrequencyMhz(80);
     Serial.begin(115200);
 
