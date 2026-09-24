@@ -10,6 +10,7 @@
 #include <ble.h>
 #include <sensor.h>
 
+#include "button.h"
 #include "led.h"
 
 // LED pins per the v2.1 schematic (see led.h). Button on D3/GPIO5, an
@@ -39,10 +40,19 @@ constexpr uint32_t FLASH_MS = 1000;
 // visibly distinct from one asleep on battery.
 constexpr Led::Color USB_IDLE { 0, 0, 20 };
 
+// Holding the button at least this long triggers a forced recalibration
+// instead of a normal beacon cycle.
+constexpr uint32_t CALIBRATION_HOLD_MS = 1000;
+
+// CO2 the sensor is told it's seeing during calibration: fresh outdoor air.
+// Change this if you recalibrate against a different known reference.
+constexpr uint16_t CALIBRATION_PPM = 420;
+
 namespace {
 
 std::unique_ptr<Led>     g_led;
 std::unique_ptr<Battery> g_battery;
+std::unique_ptr<Button>  g_button;
 
 // CO2 → colour: 400–600 green, 600–800 yellow, 800–1200 orange, >1200 red.
 Led::Color colorForCo2(uint16_t co2) {
@@ -78,6 +88,28 @@ void runCycle(esp_reset_reason_t resetReason, bool firstBoot) {
     Ble::advertise(reading, bat, resetReason);  // blocks ~5 s
 }
 
+// Forced recalibration, triggered by a long button press. Holds the LED white
+// while the sensor takes a reading and rebases its calibration, then flashes
+// the outcome (green = accepted, red = rejected). The sensor should have been
+// sitting in stable air at CALIBRATION_PPM for a few minutes beforehand.
+void runCalibration(bool firstBoot) {
+    bool ok;
+    {
+        Sensor sensor(firstBoot, SENSOR_PINS);
+        sensor.startMeasurement();  // one reading in the current air first
+        sensor.read();
+
+        g_led->set(Led::WHITE);
+        ok = sensor.calibrate(CALIBRATION_PPM);
+    }
+
+    Serial.printf("calibrate ref=%d ok=%d\n", CALIBRATION_PPM, ok ? 1 : 0);
+
+    g_led->set(ok ? Led::GREEN : Led::RED);
+    delay(FLASH_MS);
+    g_led->set(Led::OFF);
+}
+
 // Battery path: deep-sleep until the timer fires or the button is pressed.
 // Either wake source re-boots the chip straight back into setup(). Never
 // returns — the chip resets on wake.
@@ -85,9 +117,9 @@ void runCycle(esp_reset_reason_t resetReason, bool firstBoot) {
     g_led->set(Led::OFF);
     // Wait for release first: the GPIO wake below is level-triggered, so a
     // still-held button would fire it immediately and run a second cycle.
-    while (digitalRead(BUTTON_PIN) == LOW) delay(10);
+    g_button->waitForRelease();
     esp_sleep_enable_timer_wakeup(SLEEP_DURATION_US);
-    esp_deep_sleep_enable_gpio_wakeup(1ULL << BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
+    g_button->enableWakeup();
     esp_deep_sleep_start();
     while (true) {}  // unreachable; silences the compiler
 }
@@ -107,14 +139,20 @@ void app::setup() {
 
     g_battery = std::make_unique<Battery>(BAT_CONFIG);
     g_led     = std::make_unique<Led>(LED_PINS);
-    pinMode(BUTTON_PIN, INPUT_PULLUP);
+    g_button  = std::make_unique<Button>(BUTTON_PIN);
 
     esp_reset_reason_t resetReason = esp_reset_reason();
     // Both a timer wake and a button wake come back as ESP_RST_DEEPSLEEP, so
     // firstBoot is false on either — the sensor was left in power-down.
     bool firstBoot = (resetReason != ESP_RST_DEEPSLEEP);
 
-    runCycle(resetReason, firstBoot);
+    // A >1s hold (on a battery button-wake, or a cold boot with the button
+    // down) calibrates instead of running a normal cycle.
+    if (g_button->isPressed() && g_button->heldFor(CALIBRATION_HOLD_MS)) {
+        runCalibration(firstBoot);
+    } else {
+        runCycle(resetReason, firstBoot);
+    }
 
     if (!g_battery->usbConnected()) {
         deepSleepUntilNextCycle();  // battery: sleep here, never returns
@@ -133,16 +171,21 @@ void app::loop() {
 
     // Re-run the cycle every 5 minutes, or immediately on a button press.
     static uint32_t lastCycle = millis();
-    bool buttonPressed = (digitalRead(BUTTON_PIN) == LOW);
+    bool buttonPressed = g_button->isPressed();
     if (!buttonPressed && (millis() - lastCycle) < SLEEP_DURATION_MS) {
         return;
     }
 
-    runCycle(esp_reset_reason(), false);
+    // A held button calibrates; a short press (or the timer) runs a cycle.
+    if (buttonPressed && g_button->heldFor(CALIBRATION_HOLD_MS)) {
+        runCalibration(false);
+    } else {
+        runCycle(esp_reset_reason(), false);
+    }
     lastCycle = millis();
 
-    // One press = one cycle: wait for release so holding the button (or a
-    // contact still low after the ~11 s cycle) doesn't re-trigger.
-    while (digitalRead(BUTTON_PIN) == LOW) delay(10);
+    // One press = one action: wait for release so holding the button (or a
+    // contact still low after the cycle) doesn't re-trigger.
+    g_button->waitForRelease();
     g_led->set(USB_IDLE);
 }

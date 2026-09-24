@@ -64,6 +64,7 @@ add_custom_command(
     DEPENDS ${LED_DIR}/led.ino
             ${LED_DIR}/app.h ${LED_DIR}/app.cpp
             ${LED_DIR}/led.h ${LED_DIR}/led.cpp
+            ${LED_DIR}/button.h ${LED_DIR}/button.cpp
             ${COMMON_SOURCES}
     COMMENT "arduino-cli compile led (${FQBN})"
     VERBATIM

@@ -30,3 +30,16 @@ Sensor::Reading Sensor::read() {
     return r;
 }
 
+bool Sensor::calibrate(uint16_t referenceCo2) {
+    // FRC is only valid in idle mode; make sure no periodic measurement is
+    // running before issuing it (datasheet: stop, then recalibrate).
+    _sensor.stopPeriodicMeasurement();
+    delay(500);
+
+    uint16_t frcCorrection = 0;
+    int16_t error = _sensor.performForcedRecalibration(referenceCo2, frcCorrection);
+    // 0xFFFF in the correction word means the sensor rejected the FRC because
+    // it hadn't been operated in a stable environment beforehand.
+    return error == 0 && frcCorrection != 0xFFFF;
+}
+

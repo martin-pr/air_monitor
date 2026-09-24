@@ -37,6 +37,14 @@ public:
 
     Reading read();
 
+    // Forced recalibration (FRC): tell the sensor the true CO2 concentration
+    // right now (ppm) and rebase its calibration onto it. Per the SCD4x
+    // datasheet the sensor must have been measuring for >=3 min in a stable
+    // environment at `referenceCo2` beforehand, and must be in idle mode —
+    // which it is after a single-shot read(). Returns true on success, false
+    // if the sensor rejects the FRC (e.g. it hadn't been run long enough).
+    bool calibrate(uint16_t referenceCo2);
+
 private:
     SensirionI2cScd4x _sensor;
 };
