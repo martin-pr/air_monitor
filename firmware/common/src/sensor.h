@@ -26,7 +26,8 @@ public:
     // Datasheet: a single-shot measurement takes ~5s.
     static constexpr uint32_t MEASURE_MS = 5000;
 
-    // firstBoot=true  → clean up any leftover state from before the power cycle.
+    // firstBoot=true  → clean up any leftover state from before the power cycle
+    //                   (also ensures automatic self-calibration is disabled).
     // firstBoot=false → deep-sleep wake path; the sensor was in power-down.
     Sensor(bool firstBoot, const Config& config);
     ~Sensor();
@@ -46,5 +47,8 @@ public:
     bool calibrate(uint16_t referenceCo2);
 
 private:
+    // Turn off automatic self-calibration (ASC) and persist it to EEPROM.
+    void disableAutoCalibration();
+
     SensirionI2cScd4x _sensor;
 };
