@@ -107,5 +107,12 @@ module top() difference() {
     };
 }
 
+module led(size, rim_y=4, rim_x=1) union() {
+    translate([-size/2, -size/2, 0]) cube([size,size,3]);
+    translate([(-size-rim_x)/2, (-size-rim_y)/2, 0]) cube([size+rim_x,size+rim_y,1]);
+}
+
 // bottom();
-rotate(180, [1,0,0]) translate([20,0,-8]) top();
+// rotate(180, [1,0,0]) translate([20,0,-8]) top();
+
+led(5);
